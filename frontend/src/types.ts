@@ -62,7 +62,10 @@ export type VoiceHireEventType =
   | "INTEGRITY_CHALLENGE"
   | "COMMITTEE_DECISION"
   | "REPORT_READY"
-  | "EARLY_COMPLETION";
+  | "EARLY_COMPLETION"
+  | "TIME_LIMIT_REACHED"
+  | "INTERVIEW_COMPLETE"
+  | "DELIBERATION_FULL";
 
 export interface ParsedVoiceHireEvent {
   bandMessageId: string;

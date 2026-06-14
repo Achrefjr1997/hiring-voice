@@ -36,7 +36,7 @@ MODELS = {
     "probe":           "alibaba/qwen3-32b",
     "tech_evidence":   "gpt-4o-mini",
     "coverage_update": "Qwen/Qwen2.5-72B-Instruct-Turbo",
-    "committee":       "Qwen/Qwen3-235B-A22B-fp8-tput",    "tts_probe":       "elevenlabs/eleven_turbo_v2_5",
+    "committee":       "alibaba/qwen3-235b-a22b-thinking-2507",    "tts_probe":       "elevenlabs/eleven_turbo_v2_5",
     "tts_filler":      "openai/tts-1",
     # Featherless AI
     "skeptic":         "deepseek-ai/DeepSeek-R1",

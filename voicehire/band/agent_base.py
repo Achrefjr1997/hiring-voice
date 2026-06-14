@@ -1,4 +1,5 @@
 import httpx
+import json
 import os
 from abc import ABC, abstractmethod
 from config import BAND_API_BASE
@@ -18,13 +19,20 @@ class BandAgent(ABC):
 
     async def send_message(self, room_id: str, content: str, mention_ids: list[str] | None = None) -> dict:
         """Post a message mentioning specific agents."""
-        mentions = [{"id": uid} for uid in (mention_ids or [])]
-        r = await self._http.post(
-            f"/agent/chats/{room_id}/messages",
-            json={"message": {"content": content, "mentions": mentions}},
-        )
-        r.raise_for_status()
-        return r.json()
+        message = {"content": content}
+        if mention_ids:
+            message["mentions"] = [{"id": uid} for uid in mention_ids]
+        payload = {"message": message}
+        try:
+            r = await self._http.post(
+                f"/agent/chats/{room_id}/messages",
+                json=payload,
+            )
+            r.raise_for_status()
+            return r.json()
+        except httpx.HTTPStatusError as e:
+            print(f"[agent_base] HTTP error: {e.response.status_code}, body: {e.response.text[:500]}")
+            raise
 
     async def send_to_agent(self, room_id: str, agent_name: str, agent_id: str, content: str) -> dict:
         """Send a message @mentioning a specific agent by UUID."""

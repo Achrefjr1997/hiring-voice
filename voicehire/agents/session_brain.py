@@ -103,14 +103,18 @@ class SessionBrain(BandAgent):
             print(f"[session-brain] Failed to parse challenge: {e}")
 
     async def _on_session_end(self, room_id: str) -> None:
+        if not self.coverage_map:
+            return
         summary = self.coverage_map.summary()
-        portfolio_json = json.dumps({
-            "nodes": self.evidence_portfolio,
+        session_summary = {
             "coverageSummary": summary,
-        })
+            "total_evidence_count": len(self.evidence_portfolio),
+            "conversation_turns": len(self.conversation_history),
+        }
         if self.committee_room_id:
             await self.send_to_agent(self.committee_room_id, "Hiring Committee",
-                                      self.committee_id, f"SESSION_END: PORTFOLIO: {portfolio_json}")
+                                      self.committee_id, f"SESSION_END: {json.dumps(session_summary)}")
+        print(f"[session-brain] Session ended. Coverage: {summary}")
 
     async def _generate_next_probe(self, room_id: str) -> None:
         if not self.coverage_map:

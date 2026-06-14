@@ -38,8 +38,11 @@ class HiringCommittee(BandAgent):
             ev_json = content.split("EVIDENCE:", 1)[1].strip()
             self._evidence_nodes.append(json.loads(ev_json))
         elif "SESSION_END:" in content:
-            portfolio_json = content.split("PORTFOLIO:", 1)[1].strip() if "PORTFOLIO:" in content else "{}"
-            portfolio = json.loads(portfolio_json)
+            payload = json.loads(content.split("SESSION_END:", 1)[1].strip())
+            portfolio = {
+                "nodes": self._evidence_nodes,
+                "coverageSummary": payload.get("coverageSummary", {}),
+            }
             await self._deliberate(room_id, portfolio)
 
     async def _deliberate(self, room_id: str, portfolio: dict) -> None:
@@ -54,14 +57,20 @@ class HiringCommittee(BandAgent):
         )
 
         decision = normalize_keys(json.loads(chair))
-        decision["deliberation_transcript"] = {
-            "advocate": advocate,
-            "critic": critic,
-        }
         decision["model_used"] = MODELS["committee"]
 
-        await self.send_message(room_id, f"COMMITTEE_DECISION: {json.dumps(decision)}")
-        await self.send_message(room_id, "REPORT_READY")
+        truncated = {
+            "advocate": advocate[:300] + "..." if len(advocate) > 300 else advocate,
+            "critic": critic[:300] + "..." if len(critic) > 300 else critic,
+        }
+        decision["deliberation_transcript"] = truncated
+
+        decision_json = json.dumps(decision)
+        message_content = f"COMMITTEE_DECISION: {decision_json}"
+
+        await self.send_event(room_id, message_content)
+        await self.send_event(room_id, f"DELIBERATION_FULL: {json.dumps({'advocate': advocate, 'critic': critic})}")
+        await self.send_event(room_id, "REPORT_READY")
         print(f"[hiring-committee] Decision: {decision.get('final_recommendation', 'UNKNOWN')}")
 
     async def _call(self, system: str, user: str, response_format: dict | None = None) -> str:

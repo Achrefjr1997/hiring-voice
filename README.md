@@ -94,7 +94,7 @@ All chat completions use OpenAI-compatible `/v1/chat/completions` with `Authoriz
 | Probe generation | `alibaba/qwen3-32b` | `agents/session_brain.py` | `json_object` | 0.7 | 512 |
 | Technical evidence | `gpt-4o-mini` | `agents/evidence_chain.py` | `json_object` | 0.1 | 1024 |
 | Coverage map update | `Qwen/Qwen2.5-72B-Instruct-Turbo` | (in MODELS dict, not actively used) | — | — | — |
-| Committee deliberation | `Qwen/Qwen3-235B-A22B-fp8-tput` | `agents/hiring_committee.py` | `json_object` (chair only) | 0.4 | 2048 |
+| Committee deliberation | `alibaba/qwen3-235b-a22b-thinking-2507` | `agents/hiring_committee.py` | `json_object` (chair only) | 0.4 | 2048 |
 
 ### 3.2 Featherless AI — `https://api.featherless.ai/v1`
 
@@ -354,7 +354,7 @@ _process_audio_background(audio_bytes, exploration_room_id, brain_id):
 
 ### 4.9 Tests (`tests/test_coverage_map.py`)
 
-6 pytest tests for `CoverageMap`:
+11 pytest tests for `CoverageMap`:
 
 | Test | Scenario | Expected |
 |------|----------|----------|
@@ -364,6 +364,11 @@ _process_audio_background(audio_bytes, exploration_room_id, brain_id):
 | `test_must_have_beats_nice_to_have` | UNEXPLORED MUST_HAVE vs NICE_TO_HAVE | MUST_HAVE selected |
 | `test_empty_competencies` | No competencies | Returns None |
 | `test_apply_evidence_snake_case` | Evidence with snake_case keys | Status transitions correctly |
+| `test_mark_exhausted_removes_from_selection` | `mark_exhausted()` called | `select_next_target()` returns `None` |
+| `test_mark_insufficient_removes_from_selection` | `mark_insufficient()` called | `select_next_target()` returns `None` |
+| `test_exhausted_falls_through_to_next_competency` | One exhausted, one UNEXPLORED | Selects UNEXPLORED |
+| `test_all_terminal_returns_none` | All 3 competencies in terminal states | Returns `None` |
+| `test_covered_still_blocks_after_terminal_additions` | COVERED + EXHAUSTED | Returns `None` |
 
 ---
 
@@ -382,7 +387,7 @@ _process_audio_background(audio_bytes, exploration_room_id, brain_id):
 
 ```
 Browser (SessionSetup.tsx)
-  │ POST /session/create (jd, resume, rubric, role_level)
+  │ POST /session/create (jd, resume, rubric, role_level, duration_minutes)
   ▼
 FastAPI (server.py:create_session)
   ├── BandSessionFactory.create_session(session_id)

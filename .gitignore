@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+
+# Environment
+.env
+.env.*
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Logs
+*.log
+server.log
+server_err.log
+server_debug.log
+server.log
+
+# Docs
+frontend_architecture.md
+frontend_architecture_v5.md
+voicehire_dev_plan.md
+voicehire_dev_plan_v5.md
+voicehire_design.md
+voicehire_design_v5.md
+AGENTS.md

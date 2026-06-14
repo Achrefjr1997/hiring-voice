@@ -1,0 +1,12 @@
+openai
+pipecat-ai
+langgraph
+langchain
+langchain-core
+pyautogen
+instructor
+httpx
+python-dotenv
+fastapi
+websockets
+uvicorn

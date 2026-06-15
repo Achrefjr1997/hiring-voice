@@ -24,6 +24,7 @@ export function useBandSession() {
     candidateName: null,
     candidateStatus: "waiting",
     verdictRevealed: false,
+    deliberationFullText: null,
   });
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -113,6 +114,7 @@ function parseBandMessage(topic: string, payload: any): ParsedVoiceHireEvent {
     ["REPORT_READY", "REPORT_READY"],
     ["EARLY_COMPLETION", "EARLY_COMPLETION:"],
     ["CANDIDATE_IDENTIFIED", "CANDIDATE_IDENTIFIED:"],
+    ["DELIBERATION_FULL", "DELIBERATION_FULL:"],
     ["CANDIDATE_CONNECTED", "CANDIDATE_CONNECTED:"],
     ["CANDIDATE_FINISHED", "CANDIDATE_FINISHED"],
     ["CANDIDATE_DISCONNECTED", "CANDIDATE_DISCONNECTED"],
@@ -172,6 +174,8 @@ function handleParsedEvent(
         return { ...next, candidateStatus: "disconnected" as const };
       case "COMMITTEE_DECISION":
         return { ...next, decision: event.payload as HiringDecision, status: "ended" as const };
+      case "DELIBERATION_FULL":
+        return { ...next, deliberationFullText: event.payload as { advocate: string; critic: string } };
       case "REPORT_READY":
         return { ...next, verdictRevealed: true };
       default:

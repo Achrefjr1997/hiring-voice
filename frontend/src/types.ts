@@ -124,6 +124,7 @@ export interface BandSessionState {
   candidateName: string | null;
   candidateStatus: CandidateStatus;
   verdictRevealed: boolean;
+  deliberationFullText: { advocate: string; critic: string } | null;
 }
 
 export function applyCoverageUpdate(

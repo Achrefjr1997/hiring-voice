@@ -17,6 +17,7 @@ from voicehire.agents.evidence_chain import EvidenceChain
 from voicehire.agents.integrity_skeptic import IntegritySkeptic
 from voicehire.agents.hiring_committee import HiringCommittee
 from voicehire.voice.stt import transcribe
+from voicehire.reports.report_generator import generate_report
 from config import BAND_API_BASE, BAND_API_KEY, TTS_FORMAT
 
 app = FastAPI()
@@ -301,6 +302,20 @@ async def get_competency_summary(session_id: str):
         "competencies": competencies,
         "estimated_duration": f"{max(15, num_must * 2)} minutes",
     }
+
+
+@app.get("/session/{session_id}/report")
+async def get_report(session_id: str):
+    session = SESSIONS.get(session_id)
+    if not session:
+        raise HTTPException(404, "Session not found")
+    global brain
+    if not brain or not brain.coverage_map:
+        raise HTTPException(503, "Report not ready yet")
+    report = generate_report(brain)
+    report["session_id"] = session_id
+    report["status"] = session.get("status")
+    return report
 
 
 @app.post("/session/{session_id}/finish")

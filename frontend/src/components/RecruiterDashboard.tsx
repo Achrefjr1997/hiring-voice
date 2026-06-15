@@ -48,6 +48,8 @@ export default function RecruiterDashboard() {
         events={state.events}
         decision={state.decision}
         verdictRevealed={state.verdictRevealed}
+        sessionId={state.sessionId}
+        deliberationFullText={state.deliberationFullText}
       />
       {state.status === "active" && (
         <button

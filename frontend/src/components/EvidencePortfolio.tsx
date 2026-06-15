@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { FileText, CheckCircle, AlertTriangle, TrendingUp, Download } from "lucide-react";
 import type { ParsedVoiceHireEvent, HiringDecision } from "../types";
+import ReportView from "./ReportView";
 
 interface EvidencePayload {
   evidence_id?: string;
@@ -76,11 +78,16 @@ export default function EvidencePortfolio({
   events,
   decision,
   verdictRevealed = false,
+  sessionId,
+  deliberationFullText,
 }: {
   events: ParsedVoiceHireEvent[];
   decision: HiringDecision | null;
   verdictRevealed?: boolean;
+  sessionId?: string | null;
+  deliberationFullText?: { advocate: string; critic: string } | null;
 }) {
+  const [showReport, setShowReport] = useState(false);
   const evidenceEvents = events.filter((e) => e.type === "COVERAGE_MAP_UPDATE");
   const challengeEvents = events.filter((e) => e.type === "INTEGRITY_CHALLENGE");
 
@@ -90,7 +97,27 @@ export default function EvidencePortfolio({
 
   return (
     <div className="rounded-xl border border-gray-200 overflow-hidden">
-      {showVerdict && <VerdictBanner decision={decision} />}
+      {showReport && sessionId && (
+        <ReportView
+          sessionId={sessionId}
+          decision={decision}
+          deliberationFullText={deliberationFullText ?? null}
+          onClose={() => setShowReport(false)}
+        />
+      )}
+      {showVerdict && (
+        <>
+          <VerdictBanner decision={decision} />
+          <div className="px-4 py-2 border-b border-gray-100">
+            <button
+              onClick={() => setShowReport(true)}
+              className="text-xs font-medium px-3 py-1.5 rounded bg-blue-100 border border-blue-300 text-blue-700 hover:bg-blue-200"
+            >
+              View Full Report
+            </button>
+          </div>
+        </>
+      )}
       {!showVerdict && decision && <VerdictPlaceholder />}
       <div className="flex items-center gap-2 px-4 py-2 border-b border-gray-100">
         <h2 className="text-sm font-medium text-gray-700 flex-1">

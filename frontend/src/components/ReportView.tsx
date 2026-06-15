@@ -1,5 +1,14 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import type { HiringDecision } from "../types";
+
+interface ConversationEntry {
+  type: string;
+  timestamp: number;
+  competency_id?: string;
+  competency_name?: string;
+  text: string;
+  audio_url?: string | null;
+}
 
 interface CompetencyScore {
   id: string;
@@ -35,6 +44,7 @@ interface ReportData {
     must_have_covered: number;
   };
   evidence_portfolio: EvidenceNode[];
+  conversation_history: ConversationEntry[];
 }
 
 interface ReportViewProps {
@@ -95,6 +105,7 @@ export default function ReportView({ sessionId, decision, deliberationFullText, 
     competency_scorecard,
     coverage_summary,
     evidence_portfolio,
+    conversation_history,
   } = report;
 
   const recommendation = decision?.final_recommendation ?? "PENDING";
@@ -116,7 +127,7 @@ export default function ReportView({ sessionId, decision, deliberationFullText, 
             <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Executive Summary</h2>
             <div className={`rounded-lg border-2 p-4 ${isHire ? "border-green-400 bg-green-50" : "border-red-400 bg-red-50"}`}>
               <div className="flex items-center gap-3 mb-2">
-                <span className="text-2xl">{isHire ? "✅" : "❌"}</span>
+                <span className="text-2xl">{isHire ? "\u2705" : "\u274C"}</span>
                 <span className={`text-lg font-bold ${isHire ? "text-green-800" : "text-red-800"}`}>
                   {recommendation.replace(/_/g, " ")}
                 </span>
@@ -188,7 +199,7 @@ export default function ReportView({ sessionId, decision, deliberationFullText, 
                           </div>
                         )}
                         {ev.raw_transcript && (
-                          <p className="text-xs text-gray-600 italic truncate">"{ev.raw_transcript.slice(0, 150)}…"</p>
+                          <p className="text-xs text-gray-600 italic truncate">&ldquo;{ev.raw_transcript.slice(0, 150)}&hellip;&rdquo;</p>
                         )}
                         {ev.overall_confidence !== undefined && (
                           <p className="text-[11px] text-gray-400 mt-0.5">Confidence: {Math.round(ev.overall_confidence * 100)}%</p>
@@ -197,6 +208,31 @@ export default function ReportView({ sessionId, decision, deliberationFullText, 
                     </div>
                   );
                 })}
+              </div>
+            )}
+          </section>
+
+          <section>
+            <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Full Interview Transcript</h2>
+            {!conversation_history || conversation_history.length === 0 ? (
+              <p className="text-sm text-gray-400 italic">No conversation history available.</p>
+            ) : (
+              <div className="space-y-4 max-h-96 overflow-y-auto">
+                {conversation_history.map((entry, i) => (
+                  <div key={i} className={`p-4 rounded ${entry.type === "probe" ? "bg-blue-50" : "bg-green-50"}`}>
+                    <div className="text-sm text-gray-500">
+                      {new Date(entry.timestamp * 1000).toLocaleTimeString()}
+                      {entry.competency_name && ` - ${entry.competency_name}`}
+                    </div>
+                    <div className="font-semibold mt-1">
+                      {entry.type === "probe" ? "AI:" : "Candidate:"}
+                    </div>
+                    <div className="mt-2">{entry.text}</div>
+                    {entry.audio_url && (
+                      <audio controls src={entry.audio_url} className="mt-2 w-full" />
+                    )}
+                  </div>
+                ))}
               </div>
             )}
           </section>

@@ -26,11 +26,6 @@ export default function RecruiterDashboard() {
     }
   };
 
-  const handleEndSession = async () => {
-    if (!state.sessionId) return;
-    await fetch(`/session/${state.sessionId}/end`, { method: "POST" });
-  };
-
   if (state.status === "idle") {
     return <SessionSetup onSubmit={handleSessionCreate} loading={loading} />;
   }
@@ -51,14 +46,6 @@ export default function RecruiterDashboard() {
         sessionId={state.sessionId}
         deliberationFullText={state.deliberationFullText}
       />
-      {state.status === "active" && (
-        <button
-          onClick={handleEndSession}
-          className="self-start px-4 py-2 rounded-lg bg-red-100 text-red-700 text-sm font-medium hover:bg-red-200"
-        >
-          End session
-        </button>
-      )}
     </div>
   );
 }

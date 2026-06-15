@@ -3,6 +3,7 @@ import uuid
 import random
 import json
 import asyncio
+import time
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Form, UploadFile, File, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -89,6 +90,7 @@ async def _process_audio_background(
     audio_bytes: bytes,
     exploration_room_id: str,
     brain_id: str | None,
+    filename: str | None = None,
     mime: str = "audio/webm",
 ) -> None:
     """Transcribe audio in background, then post clean text events to Band."""
@@ -97,6 +99,17 @@ async def _process_audio_background(
     except Exception as e:
         print(f"[server] STT failed: {e}")
         return
+
+    # Update conversation_history with audio_url
+    if filename:
+        try:
+            if brain and hasattr(brain, 'conversation_history'):
+                for entry in reversed(brain.conversation_history):
+                    if entry.get("type") == "response" and not entry.get("audio_url"):
+                        entry["audio_url"] = f"/audio/{filename}"
+                        break
+        except Exception as e:
+            print(f"[server] Failed to update history audio_url: {e}")
 
     voice_token = os.environ["BAND_TOKEN_VOICE_PERSONA"]
     room = exploration_room_id
@@ -222,6 +235,16 @@ async def submit_audio(session_id: str, audio: UploadFile = File(...)):
     blob = await audio.read()
     mime = audio.content_type or "audio/webm"
 
+    # Save audio blob to disk for report playback
+    filename = f"{session_id}_{int(time.time())}.webm"
+    file_path = os.path.join(AUDIO_DIR, filename)
+    try:
+        with open(file_path, "wb") as f:
+            f.write(blob)
+    except Exception as e:
+        print(f"[server] Failed to save audio file: {e}")
+        filename = None
+
     filler_url = None
     filler_files = [f for f in os.listdir(AUDIO_DIR)
                     if f.startswith("filler_") and f.endswith(f".{TTS_FORMAT}")]
@@ -234,7 +257,7 @@ async def submit_audio(session_id: str, audio: UploadFile = File(...)):
 
     brain_id = factory.get_agent_id("Session Brain")
     asyncio.create_task(_process_audio_background(
-        blob, band_session.exploration_room_id, brain_id, mime,
+        blob, band_session.exploration_room_id, brain_id, filename, mime,
     ))
 
     return {"filler_url": filler_url}

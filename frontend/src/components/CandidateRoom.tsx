@@ -75,12 +75,6 @@ export default function CandidateRoom() {
     setStage("interview");
   };
 
-  const handleFinish = async () => {
-    if (!sessionId) return;
-    await fetch(`/session/${sessionId}/finish`, { method: "POST" });
-    setStage("finished");
-  };
-
   if (stage === "invalid") {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-50">
@@ -138,12 +132,6 @@ export default function CandidateRoom() {
         onAudioReady={sendAudio}
         sessionStatus={state.status}
       />
-      <button
-        onClick={handleFinish}
-        className="mt-6 px-4 py-2 rounded-lg bg-gray-100 text-gray-600 text-sm font-medium hover:bg-gray-200 transition-colors"
-      >
-        Finish Interview
-      </button>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-from voicehire.agents.session_brain import SessionBrain
+﻿from voicehire.agents.session_brain import SessionBrain
 
 
 def generate_report(brain: SessionBrain) -> dict:
@@ -26,4 +26,5 @@ def generate_report(brain: SessionBrain) -> dict:
             "must_have_covered": summary["must_have_covered"],
         },
         "evidence_portfolio": brain.evidence_portfolio[-50:],
+        "conversation_history": brain.conversation_history,
     }

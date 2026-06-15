@@ -1,4 +1,4 @@
-import json
+﻿import json
 import time
 import uuid
 from voicehire.band.agent_base import BandAgent
@@ -45,16 +45,23 @@ class SessionBrain(BandAgent):
         print(f"[session-brain] Duration set to {minutes} min ({self.max_duration_seconds}s)")
 
     async def handle_mention(self, room_id: str, message: dict) -> None:
-        content = message["content"]
+        content = message.get("content", "")
         if "COMPETENCY_GRAPH_READY:" in content:
             graph_json = content.split("COMPETENCY_GRAPH_READY:", 1)[1].strip()
             await self._on_graph_ready(room_id, json.loads(graph_json))
         elif "UTTERANCE:" in content:
             transcript = content.split("UTTERANCE:", 1)[1].strip()
             await self._on_utterance(room_id, transcript)
-        elif "EVIDENCE:" in content:
-            evidence_json = content.split("EVIDENCE:", 1)[1].strip()
-            await self._on_evidence(room_id, json.loads(evidence_json))
+        elif "CANDIDATE_UTTERANCE:" in content:
+            transcript = content.replace("CANDIDATE_UTTERANCE:", "").strip()
+            self.conversation_history.append({
+                "type": "response",
+                "timestamp": time.time(),
+                "text": transcript,
+                "audio_url": None,
+            })
+        elif "EVIDENCE:" in content or "EVIDENCE_POSTED:" in content:
+            await self._on_evidence(room_id, content)
         elif "CHALLENGE:" in content:
             await self._on_integrity_challenge(room_id, content)
         elif "CANDIDATE_IDENTIFIED:" in content:
@@ -85,7 +92,14 @@ class SessionBrain(BandAgent):
         await self.send_event(room_id, f"COVERAGE_MAP_INIT: {json.dumps(summary)}")
 
     async def _on_utterance(self, room_id: str, transcript: str) -> None:
-        self.conversation_history.append({"role": "candidate", "content": transcript})
+        self.conversation_history.append({
+            "type": "response",
+            "role": "candidate",
+            "content": transcript,
+            "text": transcript,
+            "timestamp": time.time(),
+            "audio_url": None,
+        })
         target_ctx = {}
         if self.current_target:
             target_ctx = {
@@ -97,7 +111,13 @@ class SessionBrain(BandAgent):
         await self.send_to_agent(room_id, "Evidence Chain", self.chain_id,
             f"EXTRACT: UTTERANCE: {transcript}\n---PROBE---\n{json.dumps(target_ctx)}")
 
-    async def _on_evidence(self, room_id: str, evidence_node: dict) -> None:
+    async def _on_evidence(self, room_id: str, content: str) -> None:
+        try:
+            evidence_json = content.split("EVIDENCE:", 1)[1] if "EVIDENCE:" in content else content.split("EVIDENCE_POSTED:", 1)[1]
+            evidence_node = json.loads(evidence_json)
+        except (json.JSONDecodeError, KeyError) as e:
+            print(f"[session-brain] Failed to parse EVIDENCE event: {e}")
+            return
         self.evidence_portfolio.append(evidence_node)
         delta = self.coverage_map.apply_evidence(evidence_node)
         await self.send_event(room_id, f"COVERAGE_MAP_UPDATE: {json.dumps(delta)}")
@@ -225,5 +245,13 @@ class SessionBrain(BandAgent):
         await self.send_to_agent(room_id, "Voice Persona", self.voice_id,
                                   f"SPEAK: {probe['probeText']}")
         await self.send_event(room_id, f"PROBE_GENERATED: {json.dumps(probe)}")
-        self.conversation_history.append({"role": "interviewer", "content": probe["probeText"]})
+        # Store the probe in conversation history
+        self.conversation_history.append({
+            "type": "probe",
+            "timestamp": time.time(),
+            "competency_id": target.competency_id,
+            "competency_name": target.name,
+            "text": probe["probeText"],
+            "audio_url": None,
+        })
         print(f"[session-brain] Probe #{self.probe_counts[target.competency_id]} for '{target.name}': {probe['probeText'][:80]}...")

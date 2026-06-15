@@ -1,5 +1,5 @@
 ﻿import { useEffect, useState } from "react";
-import type { HiringDecision } from "../types";
+import type { HiringDecision, IntegrityViolation, EnforcementConfig } from "../types";
 
 interface ConversationEntry {
   type: string;
@@ -45,6 +45,8 @@ interface ReportData {
   };
   evidence_portfolio: EvidenceNode[];
   conversation_history: ConversationEntry[];
+  integrity_violations: IntegrityViolation[];
+  enforcement_config: EnforcementConfig;
 }
 
 interface ReportViewProps {
@@ -106,6 +108,8 @@ export default function ReportView({ sessionId, decision, deliberationFullText, 
     coverage_summary,
     evidence_portfolio,
     conversation_history,
+    integrity_violations,
+    enforcement_config,
   } = report;
 
   const recommendation = decision?.final_recommendation ?? "PENDING";
@@ -263,6 +267,34 @@ export default function ReportView({ sessionId, decision, deliberationFullText, 
               </div>
             ) : (
               <p className="text-sm text-gray-400 italic">Deliberation text not available.</p>
+            )}
+          </section>
+
+          <section>
+            <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Integrity Audit</h2>
+            {!integrity_violations || integrity_violations.length === 0 ? (
+              <p className="text-sm text-gray-400 italic">No integrity violations detected.</p>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="font-medium text-gray-700">Enforcement:</span>
+                  <span className="text-xs px-2 py-0.5 rounded bg-gray-100 font-mono">{enforcement_config?.level ?? "N/A"}</span>
+                  {enforcement_config?.demoMode && (
+                    <span className="text-xs px-2 py-0.5 rounded bg-amber-100 text-amber-700 font-medium">Demo Mode</span>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500">{integrity_violations.length} violation{integrity_violations.length !== 1 ? "s" : ""} recorded</p>
+                <div className="space-y-1 max-h-48 overflow-y-auto">
+                  {[...integrity_violations].reverse().map((v, i) => (
+                    <div key={i} className="flex items-center gap-2 px-3 py-1.5 rounded border border-gray-100 text-xs">
+                      <span className={`w-2 h-2 rounded-full ${v.severity === "severe" ? "bg-red-400" : "bg-amber-400"}`} />
+                      <span className="font-medium text-gray-700">{v.type.replace(/_/g, " ")}</span>
+                      <span className="text-gray-400 ml-auto">{new Date(v.timestamp).toLocaleTimeString()}</span>
+                      <span className="text-gray-400 font-mono">{v.points}pt</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
           </section>
 

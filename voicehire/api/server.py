@@ -4,6 +4,7 @@ import random
 import json
 import asyncio
 import time
+from datetime import datetime
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Form, UploadFile, File, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -181,6 +182,10 @@ async def create_session(
     rubric: str = Form(default=""),
     role_level: str = Form(default="senior"),
     duration_minutes: int = Form(default=30),
+    enforcement_level: str = Form(default="OBSERVATION_ONLY"),
+    violation_threshold: int = Form(default=3),
+    grace_period: int = Form(default=1),
+    demo_mode: bool = Form(default=True),
 ):
     session_id = uuid.uuid4().hex[:8]
     band_session = await asyncio.to_thread(factory.create_session, session_id)
@@ -188,6 +193,14 @@ async def create_session(
     SESSIONS[session_id] = {
         "band_session": band_session,
         "status": "READY",
+        "enforcement_config": {
+            "level": enforcement_level,
+            "threshold": violation_threshold,
+            "grace_period": grace_period,
+            "demo_mode": demo_mode,
+        },
+        "integrity_violations": [],
+        "integrity_paused": False,
     }
 
     await listener.subscribe_to_rooms([
@@ -289,6 +302,8 @@ async def get_session(session_id: str):
     return {
         "status": session["status"],
         "candidate_name": session.get("candidate_name"),
+        "demo_mode": session.get("enforcement_config", {}).get("demo_mode", True),
+        "enforcement_level": session.get("enforcement_config", {}).get("level", "OBSERVATION_ONLY"),
     }
 
 
@@ -338,6 +353,8 @@ async def get_report(session_id: str):
     report = generate_report(brain)
     report["session_id"] = session_id
     report["status"] = session.get("status")
+    report["integrity_violations"] = session.get("integrity_violations", [])
+    report["enforcement_config"] = session.get("enforcement_config", {})
     return report
 
 
@@ -353,6 +370,64 @@ async def candidate_finish(session_id: str):
         "CANDIDATE_FINISHED:"
     )
     session["status"] = "CANDIDATE_FINISHED"
+    return {"ok": True}
+
+
+async def _relay_to_session(session_id: str, content: str) -> None:
+    """Broadcast a content message to all frontend WS clients for a session."""
+    msg = json.dumps({
+        "event": "event_created",
+        "topic": f"chat_room:{session_id}",
+        "content": content,
+        "sender_name": "@integrity-system",
+        "inserted_at": datetime.utcnow().isoformat(),
+    })
+    for ws in frontend_ws.get(session_id, set()):
+        try:
+            await ws.send_text(msg)
+        except Exception:
+            pass
+
+
+@app.post("/session/{session_id}/integrity-violation")
+async def report_integrity_violation(session_id: str, violation: dict):
+    session = SESSIONS.get(session_id)
+    if not session:
+        raise HTTPException(404, "Session not found")
+    if "integrity_violations" not in session:
+        session["integrity_violations"] = []
+    session["integrity_violations"].append(violation)
+    await _relay_to_session(session_id, f"INTEGRITY_VIOLATION: {json.dumps(violation)}")
+    config = session.get("enforcement_config", {})
+    if config.get("demo_mode", True) or config.get("level") == "OBSERVATION_ONLY":
+        return {"ok": True, "action": "logged_only"}
+    recent = [v for v in session["integrity_violations"]
+              if v.get("timestamp", 0) > (time.time() - 300) * 1000]
+    total_score = sum(v.get("points", 1) for v in recent)
+    threshold = config.get("threshold", 10)
+    if total_score >= threshold and not session.get("integrity_paused"):
+        session["integrity_paused"] = True
+        await _relay_to_session(session_id, "INTEGRITY_PAUSED:")
+    return {"ok": True, "action": "logged"}
+
+
+@app.post("/session/{session_id}/integrity-resume")
+async def resume_integrity(session_id: str):
+    session = SESSIONS.get(session_id)
+    if not session:
+        raise HTTPException(404, "Session not found")
+    session["integrity_paused"] = False
+    await _relay_to_session(session_id, "INTEGRITY_RESUMED:")
+    return {"ok": True}
+
+
+@app.post("/session/{session_id}/integrity-terminate")
+async def terminate_integrity(session_id: str):
+    session = SESSIONS.get(session_id)
+    if not session:
+        raise HTTPException(404, "Session not found")
+    session["integrity_paused"] = False
+    await _relay_to_session(session_id, "INTEGRITY_TERMINATED:")
     return {"ok": True}
 
 

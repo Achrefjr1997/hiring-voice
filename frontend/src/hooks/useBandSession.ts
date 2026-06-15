@@ -25,6 +25,11 @@ export function useBandSession() {
     candidateStatus: "waiting",
     verdictRevealed: false,
     deliberationFullText: null,
+    isSessionReady: false,
+    integrityViolations: [],
+    enforcementConfig: { level: "OBSERVATION_ONLY", threshold: 3, gracePeriod: 1, demoMode: true },
+    integrityPaused: false,
+    demoMode: true,
   });
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -118,6 +123,10 @@ function parseBandMessage(topic: string, payload: any): ParsedVoiceHireEvent {
     ["CANDIDATE_CONNECTED", "CANDIDATE_CONNECTED:"],
     ["CANDIDATE_FINISHED", "CANDIDATE_FINISHED"],
     ["CANDIDATE_DISCONNECTED", "CANDIDATE_DISCONNECTED"],
+    ["INTEGRITY_VIOLATION", "INTEGRITY_VIOLATION:"],
+    ["INTEGRITY_PAUSED", "INTEGRITY_PAUSED:"],
+    ["INTEGRITY_RESUMED", "INTEGRITY_RESUMED:"],
+    ["INTEGRITY_TERMINATED", "INTEGRITY_TERMINATED:"],
   ];
 
   for (const [type, prefix] of prefixes) {
@@ -158,7 +167,7 @@ function handleParsedEvent(
     switch (event.type) {
       case "COMPETENCY_GRAPH_READY": {
         const graph = event.payload as { competencies: CompetencyNode[] };
-        return { ...next, coverageMap: initCoverageMap(graph), status: "active" as const };
+        return { ...next, coverageMap: initCoverageMap(graph), status: "active" as const, isSessionReady: true };
       }
       case "COVERAGE_MAP_UPDATE":
         return { ...next, coverageMap: applyCoverageUpdate(s.coverageMap, event.payload as CoverageMapDelta) };
@@ -178,6 +187,14 @@ function handleParsedEvent(
         return { ...next, deliberationFullText: event.payload as { advocate: string; critic: string } };
       case "REPORT_READY":
         return { ...next, verdictRevealed: true };
+      case "INTEGRITY_VIOLATION":
+        return { ...next, integrityViolations: [...s.integrityViolations, event.payload as any] };
+      case "INTEGRITY_PAUSED":
+        return { ...next, integrityPaused: true };
+      case "INTEGRITY_RESUMED":
+        return { ...next, integrityPaused: false };
+      case "INTEGRITY_TERMINATED":
+        return { ...next, integrityPaused: false, status: "ended" as const };
       default:
         return next;
     }

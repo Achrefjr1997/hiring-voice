@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useBandSession } from "../hooks/useBandSession";
+import { useIntegrityCheck } from "../hooks/useIntegrityCheck";
 import CandidateNameForm from "./CandidateNameForm";
 import CompetencySummary from "./CompetencySummary";
 import VoiceInterface from "./VoiceInterface";
@@ -14,6 +15,7 @@ export default function CandidateRoom() {
   const [stage, setStage] = useState<Stage>("validating");
   const [error, setError] = useState<string | null>(null);
   const [competencySummary, setCompetencySummary] = useState<CompetencySummaryType | null>(null);
+  useIntegrityCheck(sessionId ?? null, stage === "interview");
 
   useEffect(() => {
     if (!sessionId) {
@@ -69,8 +71,15 @@ export default function CandidateRoom() {
     setStage("summary");
   };
 
-  const handleStartInterview = () => {
+  const handleStartInterview = async () => {
     if (!sessionId) return;
+    try {
+      if (document.documentElement.requestFullscreen) {
+        await document.documentElement.requestFullscreen();
+      }
+    } catch (err) {
+      console.warn("[AntiCheat] Fullscreen request failed:", err);
+    }
     connect(sessionId);
     setStage("interview");
   };
@@ -126,7 +135,16 @@ export default function CandidateRoom() {
   }
 
   return (
-    <div className="flex flex-col items-center justify-center h-screen bg-gray-50 p-4">
+    <div className="flex flex-col items-center justify-center h-screen bg-gray-50 p-4 relative">
+      {state.integrityPaused && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
+          <div className="bg-white rounded-xl shadow-xl max-w-md p-8 text-center">
+            <h2 className="text-lg font-semibold text-red-700 mb-2">Interview Paused</h2>
+            <p className="text-sm text-gray-600">Please wait for the recruiter to resume the session.</p>
+          </div>
+        </div>
+      )}
+
       <VoiceInterface
         events={state.events}
         onAudioReady={sendAudio}

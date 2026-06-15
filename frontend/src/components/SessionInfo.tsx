@@ -13,10 +13,12 @@ export default function SessionInfo({
   sessionLink,
   candidateName,
   candidateStatus,
+  isSessionReady,
 }: {
   sessionLink: string | null;
   candidateName: string | null;
   candidateStatus: CandidateStatus;
+  isSessionReady: boolean;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -52,10 +54,15 @@ export default function SessionInfo({
             <span className="text-xs text-gray-400 truncate flex-1">{sessionLink}</span>
             <button
               onClick={copyLink}
-              className="shrink-0 flex items-center gap-1 px-2 py-1 text-xs font-medium rounded border border-gray-200 text-gray-600 hover:bg-gray-50"
+              disabled={!isSessionReady}
+              className={`shrink-0 flex items-center gap-1 px-2 py-1 text-xs font-medium rounded border ${
+                isSessionReady
+                  ? "border-gray-200 text-gray-600 hover:bg-gray-50"
+                  : "border-gray-100 text-gray-300 cursor-not-allowed"
+              }`}
             >
-              {copied ? <Check size={12} className="text-green-500" /> : <Copy size={12} />}
-              {copied ? "Copied" : "Copy"}
+              {isSessionReady ? (copied ? <Check size={12} className="text-green-500" /> : <Copy size={12} />) : null}
+              {isSessionReady ? (copied ? "Copied" : "Copy") : "Initializing AI Agents..."}
             </button>
           </div>
         )}

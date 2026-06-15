@@ -69,7 +69,11 @@ export type VoiceHireEventType =
   | "CANDIDATE_IDENTIFIED"
   | "CANDIDATE_CONNECTED"
   | "CANDIDATE_FINISHED"
-  | "CANDIDATE_DISCONNECTED";
+  | "CANDIDATE_DISCONNECTED"
+  | "INTEGRITY_VIOLATION"
+  | "INTEGRITY_PAUSED"
+  | "INTEGRITY_RESUMED"
+  | "INTEGRITY_TERMINATED";
 
 export interface ParsedVoiceHireEvent {
   bandMessageId: string;
@@ -113,6 +117,22 @@ export interface CompetencySummary {
 
 export type CandidateStatus = "waiting" | "connected" | "finished" | "disconnected";
 
+export type EnforcementLevel = "OBSERVATION_ONLY" | "WARNING_MODE" | "AUTO_TERMINATE" | "LOCKDOWN";
+
+export interface IntegrityViolation {
+  type: string;
+  timestamp: number;
+  severity: "warning" | "severe";
+  points: number;
+}
+
+export interface EnforcementConfig {
+  level: EnforcementLevel;
+  threshold: number;
+  gracePeriod: number;
+  demoMode: boolean;
+}
+
 export interface BandSessionState {
   sessionId: string | null;
   status: "idle" | "ready" | "active" | "ended";
@@ -125,6 +145,11 @@ export interface BandSessionState {
   candidateStatus: CandidateStatus;
   verdictRevealed: boolean;
   deliberationFullText: { advocate: string; critic: string } | null;
+  isSessionReady: boolean;
+  integrityViolations: IntegrityViolation[];
+  enforcementConfig: EnforcementConfig;
+  integrityPaused: boolean;
+  demoMode: boolean;
 }
 
 export function applyCoverageUpdate(

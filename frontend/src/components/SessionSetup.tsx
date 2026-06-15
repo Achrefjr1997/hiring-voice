@@ -4,17 +4,21 @@ export default function SessionSetup({
   onSubmit,
   loading,
 }: {
-  onSubmit: (jd: string, resume: string, rubric: string, duration: string) => Promise<void>;
+  onSubmit: (jd: string, resume: string, rubric: string, duration: string, enforcementLevel: string, violationThreshold: number, gracePeriod: number, demoMode: boolean) => Promise<void>;
   loading: boolean;
 }) {
   const [jd, setJd] = useState("");
   const [resume, setResume] = useState("");
   const [rubric, setRubric] = useState("");
   const [duration, setDuration] = useState("30");
+  const [enforcementLevel, setEnforcementLevel] = useState("OBSERVATION_ONLY");
+  const [violationThreshold, setViolationThreshold] = useState("3");
+  const [gracePeriod, setGracePeriod] = useState("1");
+  const [demoMode, setDemoMode] = useState(true);
 
   const handleSubmit = async () => {
     if (!jd.trim() || !resume.trim()) return;
-    await onSubmit(jd, resume, rubric, duration);
+    await onSubmit(jd, resume, rubric, duration, enforcementLevel, parseInt(violationThreshold) || 3, parseInt(gracePeriod) || 1, demoMode);
   };
 
   return (
@@ -67,6 +71,59 @@ export default function SessionSetup({
           <option value="60">60 Minutes (Executive)</option>
         </select>
       </div>
+
+      <fieldset className="border border-gray-200 rounded-lg p-4 space-y-3">
+        <legend className="text-sm font-semibold text-gray-700 px-1">Anti-Cheat Enforcement</legend>
+
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-medium text-gray-600">Enforcement Level</label>
+          <select
+            value={enforcementLevel}
+            onChange={(e) => setEnforcementLevel(e.target.value)}
+            className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+          >
+            <option value="OBSERVATION_ONLY">Observation Only (log violations)</option>
+            <option value="WARNING_MODE">Warning Mode (show warnings)</option>
+            <option value="AUTO_TERMINATE">Auto-Terminate (end on threshold)</option>
+            <option value="LOCKDOWN">Lockdown (terminate on first violation)</option>
+          </select>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-gray-600">Violation Threshold</label>
+            <input
+              type="number"
+              min={1}
+              max={50}
+              value={violationThreshold}
+              onChange={(e) => setViolationThreshold(e.target.value)}
+              className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-gray-600">Grace Period (warnings)</label>
+            <input
+              type="number"
+              min={0}
+              max={10}
+              value={gracePeriod}
+              onChange={(e) => setGracePeriod(e.target.value)}
+              className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+            />
+          </div>
+        </div>
+
+        <label className="flex items-center gap-2 text-sm text-gray-600">
+          <input
+            type="checkbox"
+            checked={demoMode}
+            onChange={(e) => setDemoMode(e.target.checked)}
+            className="rounded border-gray-300"
+          />
+          Demo mode (log violations only, no auto-action)
+        </label>
+      </fieldset>
 
       <button
         onClick={handleSubmit}

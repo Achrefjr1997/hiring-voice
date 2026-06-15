@@ -65,7 +65,11 @@ export type VoiceHireEventType =
   | "EARLY_COMPLETION"
   | "TIME_LIMIT_REACHED"
   | "INTERVIEW_COMPLETE"
-  | "DELIBERATION_FULL";
+  | "DELIBERATION_FULL"
+  | "CANDIDATE_IDENTIFIED"
+  | "CANDIDATE_CONNECTED"
+  | "CANDIDATE_FINISHED"
+  | "CANDIDATE_DISCONNECTED";
 
 export interface ParsedVoiceHireEvent {
   bandMessageId: string;
@@ -95,6 +99,20 @@ export interface BandRooms {
   committeeRoomId: string;
 }
 
+export interface CompetencySummaryItem {
+  name: string;
+  domain: string;
+  classification: "MUST_HAVE" | "NICE_TO_HAVE";
+  weight: number;
+}
+
+export interface CompetencySummary {
+  competencies: CompetencySummaryItem[];
+  estimated_duration: string;
+}
+
+export type CandidateStatus = "waiting" | "connected" | "finished" | "disconnected";
+
 export interface BandSessionState {
   sessionId: string | null;
   status: "idle" | "ready" | "active" | "ended";
@@ -103,6 +121,9 @@ export interface BandSessionState {
   decision: HiringDecision | null;
   connected: boolean;
   rooms: BandRooms | null;
+  candidateName: string | null;
+  candidateStatus: CandidateStatus;
+  verdictRevealed: boolean;
 }
 
 export function applyCoverageUpdate(

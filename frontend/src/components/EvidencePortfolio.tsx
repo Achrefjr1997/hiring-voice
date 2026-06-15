@@ -60,21 +60,38 @@ function VerdictBanner({ decision }: { decision: HiringDecision }) {
   );
 }
 
+function VerdictPlaceholder() {
+  return (
+    <div className="flex items-center gap-3 px-4 py-3 border-b bg-gray-50 border-gray-200">
+      <span className="text-xl">🔒</span>
+      <div className="flex-1">
+        <span className="font-bold text-sm text-gray-500">Verdict Hidden</span>
+        <span className="text-xs text-gray-400 ml-2">Awaiting Committee Report</span>
+      </div>
+    </div>
+  );
+}
+
 export default function EvidencePortfolio({
   events,
   decision,
+  verdictRevealed = false,
 }: {
   events: ParsedVoiceHireEvent[];
   decision: HiringDecision | null;
+  verdictRevealed?: boolean;
 }) {
   const evidenceEvents = events.filter((e) => e.type === "COVERAGE_MAP_UPDATE");
   const challengeEvents = events.filter((e) => e.type === "INTEGRITY_CHALLENGE");
 
   if (evidenceEvents.length === 0 && challengeEvents.length === 0 && !decision) return null;
 
+  const showVerdict = decision && verdictRevealed;
+
   return (
     <div className="rounded-xl border border-gray-200 overflow-hidden">
-      {decision && <VerdictBanner decision={decision} />}
+      {showVerdict && <VerdictBanner decision={decision} />}
+      {!showVerdict && decision && <VerdictPlaceholder />}
       <div className="flex items-center gap-2 px-4 py-2 border-b border-gray-100">
         <h2 className="text-sm font-medium text-gray-700 flex-1">
           Evidence Portfolio

@@ -257,12 +257,65 @@ async def end_session(session_id: str):
     return {"status": "ok"}
 
 
-@app.get("/session/{session_id}/status")
-async def session_status(session_id: str):
+@app.get("/session/{session_id}")
+async def get_session(session_id: str):
     session = SESSIONS.get(session_id)
     if not session:
-        return {"error": "Session not found"}
-    return {"status": session["status"]}
+        raise HTTPException(404, "Session not found")
+    return {
+        "status": session["status"],
+        "candidate_name": session.get("candidate_name"),
+    }
+
+
+@app.post("/session/{session_id}/candidate")
+async def set_candidate_name(session_id: str, first_name: str = Form(...), last_name: str = Form(...)):
+    session = SESSIONS.get(session_id)
+    if not session:
+        raise HTTPException(404, "Session not found")
+    full = f"{first_name} {last_name}"
+    session["candidate_name"] = full
+    band_session = session["band_session"]
+    await _agent_post_event(
+        os.environ["BAND_TOKEN_SESSION_BRAIN"],
+        band_session.exploration_room_id,
+        f"CANDIDATE_IDENTIFIED: {json.dumps({'first_name': first_name, 'last_name': last_name})}"
+    )
+    return {"ok": True, "candidate_name": full}
+
+
+@app.get("/session/{session_id}/competencies")
+async def get_competency_summary(session_id: str):
+    session = SESSIONS.get(session_id)
+    if not session:
+        raise HTTPException(404, "Session not found")
+    global brain
+    if not brain or not brain.coverage_map:
+        raise HTTPException(503, "Competency graph not ready — retrying")
+    competencies = [
+        {"name": c.name, "domain": c.domain, "classification": c.classification, "weight": c.weight}
+        for c in brain.coverage_map.competencies.values()
+    ]
+    num_must = sum(1 for c in competencies if c["classification"] == "MUST_HAVE")
+    return {
+        "competencies": competencies,
+        "estimated_duration": f"{max(15, num_must * 2)} minutes",
+    }
+
+
+@app.post("/session/{session_id}/finish")
+async def candidate_finish(session_id: str):
+    session = SESSIONS.get(session_id)
+    if not session:
+        raise HTTPException(404, "Session not found")
+    band_session = session["band_session"]
+    await _agent_post_event(
+        os.environ["BAND_TOKEN_SESSION_BRAIN"],
+        band_session.exploration_room_id,
+        "CANDIDATE_FINISHED:"
+    )
+    session["status"] = "CANDIDATE_FINISHED"
+    return {"ok": True}
 
 
 @app.websocket("/ws/{session_id}")
@@ -271,6 +324,16 @@ async def ws_relay(ws: WebSocket, session_id: str):
     if session_id not in frontend_ws:
         frontend_ws[session_id] = set()
     frontend_ws[session_id].add(ws)
+    session = SESSIONS.get(session_id)
+    # Notify once when candidate WS connects (not recruiter — guard via candidate_name + one-shot flag)
+    if session and not session.get("candidate_connected_sent") and session.get("candidate_name"):
+        session["candidate_connected_sent"] = True
+        band_session = session["band_session"]
+        await _agent_post_event(
+            os.environ["BAND_TOKEN_SESSION_BRAIN"],
+            band_session.exploration_room_id,
+            "CANDIDATE_CONNECTED:"
+        )
     try:
         while True:
             await ws.receive_text()
@@ -278,3 +341,13 @@ async def ws_relay(ws: WebSocket, session_id: str):
         pass
     finally:
         frontend_ws.get(session_id, set()).discard(ws)
+        # Notify when last candidate WS disconnects while session active
+        if (session
+                and len(frontend_ws.get(session_id, set())) == 0
+                and session.get("status") in ("READY", "active", "CANDIDATE_FINISHED")):
+            band_session = session["band_session"]
+            await _agent_post_event(
+                os.environ["BAND_TOKEN_SESSION_BRAIN"],
+                band_session.exploration_room_id,
+                "CANDIDATE_DISCONNECTED:"
+            )

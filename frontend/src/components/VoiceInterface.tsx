@@ -78,12 +78,16 @@ export default function VoiceInterface({ events, onAudioReady, sessionStatus }: 
 
       recorder.onstop = async () => {
         const blob = new Blob(chunks, { type: "audio/webm;codecs=opus" });
-        const fillerUrl = await onAudioReady(blob);
-        if (fillerUrl) {
-          const audio = new Audio(fillerUrl);
-          audio.crossOrigin = "anonymous";
-          audio.play().catch(() => {});
-          fillerRef.current = audio;
+        try {
+          const fillerUrl = await onAudioReady(blob);
+          if (fillerUrl) {
+            const audio = new Audio(fillerUrl);
+            audio.crossOrigin = "anonymous";
+            audio.play().catch(() => {});
+            fillerRef.current = audio;
+          }
+        } catch (e) {
+          console.error("[VoiceInterface] Failed to send audio:", e);
         }
         stream.getTracks().forEach((t) => t.stop());
       };

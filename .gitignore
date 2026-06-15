@@ -4,7 +4,6 @@ __pycache__/
 
 # Environment
 .env
-.env.*
 
 # Node
 node_modules/
@@ -26,3 +25,4 @@ voicehire_dev_plan_v5.md
 voicehire_design.md
 voicehire_design_v5.md
 AGENTS.md
+voicehire_dev plan.md

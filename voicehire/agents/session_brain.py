@@ -33,6 +33,12 @@ class SessionBrain(BandAgent):
         self.start_time: float | None = None
         self.max_duration_seconds: int = 30 * 60
         self.probe_counts: dict[str, int] = {}
+        self.candidate_name: str | None = None
+        self.competency_start_times: dict[str, float] = {}
+        self.max_competency_duration: int = 10 * 60
+        self.max_questions_per_competency: int = 3
+        self.candidate_ready = False
+        self.first_probe_generated = False
 
     def set_duration(self, minutes: int) -> None:
         self.max_duration_seconds = minutes * 60
@@ -51,6 +57,16 @@ class SessionBrain(BandAgent):
             await self._on_evidence(room_id, json.loads(evidence_json))
         elif "CHALLENGE:" in content:
             await self._on_integrity_challenge(room_id, content)
+        elif "CANDIDATE_IDENTIFIED:" in content:
+            data = json.loads(content.split("CANDIDATE_IDENTIFIED:", 1)[1].strip())
+            self.candidate_name = f"{data.get('first_name', '')} {data.get('last_name', '')}".strip()
+            self.candidate_ready = True
+            print(f"[session-brain] Candidate identified: {self.candidate_name}. Waiting for WS connection...")
+        elif "CANDIDATE_CONNECTED" in content:
+            print("[session-brain] Candidate WebSocket connected. Generating first probe.")
+            if self.candidate_ready and not self.first_probe_generated and self.coverage_map:
+                self.first_probe_generated = True
+                await self._generate_next_probe(room_id)
         elif "SESSION_END" in content:
             await self._on_session_end(room_id)
 
@@ -65,11 +81,8 @@ class SessionBrain(BandAgent):
         summary = self.coverage_map.summary()
         self.start_time = time.time()
         print(f"[session-brain] CoverageMap seeded: {summary['total']} competencies, "
-              f"{summary['must_have_total']} MUST_HAVE")
+              f"{summary['must_have_total']} MUST_HAVE. Waiting for candidate to connect...")
         await self.send_event(room_id, f"COVERAGE_MAP_INIT: {json.dumps(summary)}")
-
-        room = self.exploration_room_id or room_id
-        await self._generate_next_probe(room)
 
     async def _on_utterance(self, room_id: str, transcript: str) -> None:
         self.conversation_history.append({"role": "candidate", "content": transcript})
@@ -120,6 +133,10 @@ class SessionBrain(BandAgent):
         if not self.coverage_map:
             return
 
+        if not self.candidate_ready:
+            print("[session-brain] Candidate not ready yet. Waiting...")
+            return
+
         # 1. TIME LIMIT CHECK — recruiter-controlled hard cutoff
         if self.start_time and (time.time() - self.start_time) > self.max_duration_seconds:
             print(f"[session-brain] TIME_LIMIT_REACHED after {self.max_duration_seconds}s")
@@ -127,14 +144,33 @@ class SessionBrain(BandAgent):
             await self._on_session_end(room_id)
             return
 
-        # 2. SELECT NEXT TARGET with dynamic allocation + stuck detection
+        # 2. SELECT NEXT TARGET with per-subject limits + dynamic allocation + stuck detection
         target = self.coverage_map.select_next_target()
 
         while target:
             cid = target.competency_id
             count = self.probe_counts.get(cid, 0)
 
-            # 2a. WEIGHT-BASED CAP — heavier competencies get more questions
+            # Track start time for this specific competency
+            if cid not in self.competency_start_times:
+                self.competency_start_times[cid] = time.time()
+
+            # 2a. PER-COMPETENCY TIME LIMIT — 10 min max per subject
+            elapsed = time.time() - self.competency_start_times[cid]
+            if elapsed > self.max_competency_duration:
+                print(f"[session-brain] TIME_LIMIT for '{target.name}': {elapsed:.0f}s > {self.max_competency_duration}s")
+                self.coverage_map.mark_exhausted(cid)
+                target = self.coverage_map.select_next_target()
+                continue
+
+            # 2b. PER-COMPETENCY QUESTION LIMIT — hard cap of 3
+            if count >= self.max_questions_per_competency:
+                print(f"[session-brain] QUESTION_LIMIT for '{target.name}': {count} >= {self.max_questions_per_competency}")
+                self.coverage_map.mark_exhausted(cid)
+                target = self.coverage_map.select_next_target()
+                continue
+
+            # 2c. WEIGHT-BASED CAP — heavier competencies get more questions
             dynamic_max = max(2, round(target.weight * 20))
             if count >= dynamic_max:
                 print(f"[session-brain] EXHAUSTED '{target.name}': {count} probes (max {dynamic_max} by weight {target.weight})")
@@ -142,7 +178,7 @@ class SessionBrain(BandAgent):
                 target = self.coverage_map.select_next_target()
                 continue
 
-            # 2b. STUCK DETECTOR — 3+ probes without reaching COVERED
+            # 2d. STUCK DETECTOR — 3+ probes without reaching COVERED
             if count >= 3 and target.status != "COVERED":
                 print(f"[session-brain] INSUFFICIENT '{target.name}': {count} probes and still {target.status}")
                 self.coverage_map.mark_insufficient(cid)
@@ -161,8 +197,12 @@ class SessionBrain(BandAgent):
         # 4. Increment probe count and proceed with generation
         self.probe_counts[target.competency_id] = self.probe_counts.get(target.competency_id, 0) + 1
         self.current_target = target
+        elapsed = time.time() - self.competency_start_times.get(target.competency_id, time.time())
+        print(f"[session-brain] Probe #{self.probe_counts[target.competency_id]} for '{target.name}' (time: {elapsed:.0f}s / {self.max_competency_duration}s)")
 
+        candidate_tag = f"CANDIDATE: {self.candidate_name}\n" if self.candidate_name else ""
         probe_context = (
+            f"{candidate_tag}"
             f"TARGET: {target.name} DOMAIN: {target.domain}\n"
             f"DEPTH: {target.depth_required} COVERAGE: {target.confidence:.0%}\n"
             f"HISTORY: {json.dumps(self.conversation_history[-5:])}"

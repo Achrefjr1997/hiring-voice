@@ -21,6 +21,9 @@ export function useBandSession() {
     decision: null,
     connected: false,
     rooms: null,
+    candidateName: null,
+    candidateStatus: "waiting",
+    verdictRevealed: false,
   });
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -109,6 +112,10 @@ function parseBandMessage(topic: string, payload: any): ParsedVoiceHireEvent {
     ["COMMITTEE_DECISION", "COMMITTEE_DECISION:"],
     ["REPORT_READY", "REPORT_READY"],
     ["EARLY_COMPLETION", "EARLY_COMPLETION:"],
+    ["CANDIDATE_IDENTIFIED", "CANDIDATE_IDENTIFIED:"],
+    ["CANDIDATE_CONNECTED", "CANDIDATE_CONNECTED:"],
+    ["CANDIDATE_FINISHED", "CANDIDATE_FINISHED"],
+    ["CANDIDATE_DISCONNECTED", "CANDIDATE_DISCONNECTED"],
   ];
 
   for (const [type, prefix] of prefixes) {
@@ -153,8 +160,20 @@ function handleParsedEvent(
       }
       case "COVERAGE_MAP_UPDATE":
         return { ...next, coverageMap: applyCoverageUpdate(s.coverageMap, event.payload as CoverageMapDelta) };
+      case "CANDIDATE_IDENTIFIED": {
+        const name = event.payload as { first_name: string; last_name: string };
+        return { ...next, candidateName: `${name.first_name} ${name.last_name}`, candidateStatus: "connected" as const };
+      }
+      case "CANDIDATE_CONNECTED":
+        return { ...next, status: "active" as const, candidateStatus: "connected" as const };
+      case "CANDIDATE_FINISHED":
+        return { ...next, candidateStatus: "finished" as const };
+      case "CANDIDATE_DISCONNECTED":
+        return { ...next, candidateStatus: "disconnected" as const };
       case "COMMITTEE_DECISION":
         return { ...next, decision: event.payload as HiringDecision, status: "ended" as const };
+      case "REPORT_READY":
+        return { ...next, verdictRevealed: true };
       default:
         return next;
     }

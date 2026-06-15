@@ -39,6 +39,6 @@ MODELS = {
     "committee":       "alibaba/qwen3-235b-a22b-thinking-2507",    "tts_probe":       "elevenlabs/eleven_turbo_v2_5",
     "tts_filler":      "openai/tts-1",
     # Featherless AI
-    "skeptic":         "deepseek-ai/DeepSeek-R1",
+    "skeptic":         "deepseek-ai/DeepSeek-R1-0528",
     "behav_evidence":  "mistralai/Mistral-7B-Instruct-v0.3",
 }

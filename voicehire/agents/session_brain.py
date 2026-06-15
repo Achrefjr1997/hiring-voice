@@ -95,7 +95,7 @@ class SessionBrain(BandAgent):
                 "depth_required": self.current_target.depth_required,
             }
         await self.send_to_agent(room_id, "Evidence Chain", self.chain_id,
-            f"EXTRACT: UTTERANCE: {transcript} PROBE: {json.dumps(target_ctx)}")
+            f"EXTRACT: UTTERANCE: {transcript}\n---PROBE---\n{json.dumps(target_ctx)}")
 
     async def _on_evidence(self, room_id: str, evidence_node: dict) -> None:
         self.evidence_portfolio.append(evidence_node)

@@ -47,8 +47,12 @@ class EvidenceChain(BandAgent):
             return
         parts = content.split("EXTRACT:", 1)[1]
         utterance = self._extract_section(parts, "UTTERANCE:")
-        probe_raw = self._extract_section(parts, "PROBE:")
-        probe_ctx = json.loads(probe_raw) if probe_raw else {}
+        probe_raw = self._extract_section(parts, "---PROBE---")
+        try:
+            probe_ctx = json.loads(probe_raw) if probe_raw else {}
+        except json.JSONDecodeError:
+            print(f"[evidence-chain] Failed to parse probe context: {probe_raw[:100]}")
+            probe_ctx = {}
 
         evidence_node = await self.extract(utterance, probe_ctx)
 
@@ -97,7 +101,11 @@ class EvidenceChain(BandAgent):
             max_tokens=1024, temperature=0.1,
             response_format={"type": "json_object"},
         )
-        return normalize_keys(json.loads(r.choices[0].message.content))
+        try:
+            return normalize_keys(json.loads(r.choices[0].message.content))
+        except (json.JSONDecodeError, KeyError, TypeError) as e:
+            print(f"[evidence-chain] LLM returned malformed JSON: {e}")
+            return {}
 
     async def _extract_behavioral(self, ctx: dict) -> dict:
         r = await self.feather.client.chat.completions.create(
@@ -109,10 +117,14 @@ class EvidenceChain(BandAgent):
             max_tokens=512, temperature=0.1,
             response_format={"type": "json_object"},
         )
-        return normalize_keys(json.loads(r.choices[0].message.content))
+        try:
+            return normalize_keys(json.loads(r.choices[0].message.content))
+        except (json.JSONDecodeError, KeyError, TypeError) as e:
+            print(f"[evidence-chain] LLM returned malformed JSON: {e}")
+            return {}
 
     def _extract_section(self, content: str, marker: str) -> str:
-        markers = ["UTTERANCE:", "PROBE:"]
+        markers = ["UTTERANCE:", "---PROBE---"]
         start = content.find(marker)
         if start == -1:
             return ""

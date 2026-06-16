@@ -1,36 +1,46 @@
-import { useAuth } from "./AuthProvider";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
+import { SidebarProvider, useSidebar } from "./SidebarContext";
+import RecruiterSidebar from "./RecruiterSidebar";
 
-export default function LayoutShell({ children }: { children: React.ReactNode }) {
-  const { token, logout } = useAuth();
+function LayoutContent({ children }: { children: React.ReactNode }) {
+  const { activeView, setActiveView } = useSidebar();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const handleViewChange = (view: string) => {
+    setActiveView(view as any);
+    if (location.pathname !== "/") {
+      navigate("/");
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-bg-primary flex flex-col">
-      {/* Top navigation bar */}
-      <header className="h-12 border-b border-border-default flex items-center px-6 shrink-0">
-        <span className="font-heading text-h3 text-accent-gold tracking-wide">
-          VoiceHire
-        </span>
-        <span className="ml-3 text-caption text-text-muted border-l border-border-default pl-3 leading-none">
-          recruiter
-        </span>
-        <div className="ml-auto flex items-center gap-3">
-          {token && (
-            <button
-              onClick={() => { logout(); navigate("/login"); }}
-              className="text-caption text-text-secondary hover:text-text-primary transition-colors"
-            >
-              Sign out
-            </button>
-          )}
-        </div>
-      </header>
-
-      {/* Main content area */}
-      <main className="flex-1 overflow-auto">
+    <div className="flex-1 flex overflow-hidden">
+      <RecruiterSidebar activeView={activeView} onViewChange={handleViewChange} />
+      <main className="flex-1 flex flex-col overflow-hidden">
         {children}
       </main>
     </div>
+  );
+}
+
+export default function LayoutShell({ children }: { children: React.ReactNode }) {
+  return (
+    <SidebarProvider>
+      <div className="h-screen bg-bg-primary flex flex-col">
+        {/* Thin top bar with brand */}
+        <header className="h-12 border-b border-border-default flex items-center px-6 shrink-0">
+          <span className="font-heading text-h3 text-accent-gold tracking-wide">
+            VoiceHire
+          </span>
+          <span className="ml-3 text-caption text-text-muted border-l border-border-default pl-3 leading-none">
+            recruiter
+          </span>
+        </header>
+
+        {/* Sidebar + content row */}
+        <LayoutContent>{children}</LayoutContent>
+      </div>
+    </SidebarProvider>
   );
 }

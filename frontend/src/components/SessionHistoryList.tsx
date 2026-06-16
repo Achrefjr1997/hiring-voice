@@ -20,21 +20,23 @@ export default function SessionHistoryList({
   onCreateNew,
 }: {
   sessions: SessionRow[];
-  onCreateNew: () => void;
+  onCreateNew?: () => void;
 }) {
   const navigate = useNavigate();
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-h3 font-heading text-text-primary">Session History</h2>
-        <button
-          onClick={onCreateNew}
-          className="px-4 py-2 rounded-radius-card bg-accent-gold text-bg-primary text-caption font-semibold hover:brightness-110 transition-all"
-        >
-          + New Interview
-        </button>
-      </div>
+      {onCreateNew && (
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-h3 font-heading text-text-primary">Session History</h2>
+          <button
+            onClick={onCreateNew}
+            className="px-4 py-2 rounded-radius-card bg-accent-gold text-bg-primary text-caption font-semibold hover:brightness-110 transition-all"
+          >
+            + New Interview
+          </button>
+        </div>
+      )}
 
       {sessions.length === 0 ? (
         <div className="text-center py-16 bg-surface-default border border-border-default rounded-radius-card">

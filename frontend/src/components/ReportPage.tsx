@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "./AuthProvider";
 import type { HiringDecision, IntegrityViolation, EnforcementConfig } from "../types";
@@ -66,15 +66,7 @@ interface HistoryData {
   events?: HistoryEvent[];
 }
 
-const SECTION_NAV = [
-  { id: "executive-summary", label: "Executive summary" },
-  { id: "competency-scorecard", label: "Competency scorecard" },
-  { id: "evidence-timeline", label: "Evidence timeline" },
-  { id: "full-transcript", label: "Full transcript" },
-  { id: "committee-deliberation", label: "Committee deliberation" },
-  { id: "integrity-audit", label: "Integrity audit" },
-  { id: "session-metadata", label: "Session metadata" },
-] as const;
+
 
 type VerdictState = "PENDING" | "STRONG_NO_HIRE" | "NO_HIRE" | "HIRE" | "STRONG_HIRE";
 
@@ -185,14 +177,12 @@ export default function ReportPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const [activeSection, setActiveSection] = useState("executive-summary");
+
   const [showAllCompetencies, setShowAllCompetencies] = useState(false);
   const [showAllEvidence, setShowAllEvidence] = useState(false);
   const [showAllViolations, setShowAllViolations] = useState(false);
   const [transcriptExpanded, setTranscriptExpanded] = useState(false);
   const [deliberationExpanded, setDeliberationExpanded] = useState(false);
-
-  const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!sessionId || !token) return;
@@ -223,29 +213,6 @@ export default function ReportPage() {
       })
       .catch(() => { setError("network"); setLoading(false); });
   }, [sessionId, token]);
-
-  useEffect(() => {
-    const content = contentRef.current;
-    if (!content || !report) return;
-    const sections = content.querySelectorAll<HTMLElement>("section[id]");
-    if (!sections.length) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        let best: string | null = null;
-        let bestRatio = 0;
-        for (const entry of entries) {
-          if (entry.isIntersecting && entry.intersectionRatio > bestRatio) {
-            bestRatio = entry.intersectionRatio;
-            best = entry.target.id;
-          }
-        }
-        if (best) setActiveSection(best);
-      },
-      { root: content, rootMargin: "-10% 0px -60% 0px", threshold: [0, 0.1, 0.2, 0.3, 0.4, 0.5] }
-    );
-    sections.forEach((s) => observer.observe(s));
-    return () => observer.disconnect();
-  }, [report]);
 
   const verdict = useMemo(() => getInitialVerdict(decision), [decision]);
   const isPositive = verdict === "HIRE" || verdict === "STRONG_HIRE";
@@ -306,40 +273,15 @@ export default function ReportPage() {
   }
 
   return (
-    <div className="max-w-[1100px] mx-auto px-6 flex">
-      {/* Sidebar */}
-      <nav className="w-[220px] flex-shrink-0 sticky top-0 self-start py-8 overflow-hidden">
-        <button
-          onClick={() => navigate(-1)}
-          className="flex items-center gap-1.5 text-caption text-text-muted hover:text-text-primary mb-6 transition-colors"
-        >
-          <i className="ti ti-arrow-left text-sm" />
-          Back
-        </button>
-        <ul className="space-y-2">
-          {SECTION_NAV.map((item) => (
-            <li key={item.id}>
-              <a
-                href={`#${item.id}`}
-                onClick={(e) => {
-                  e.preventDefault();
-                  contentRef.current?.querySelector(`#${item.id}`)?.scrollIntoView({ behavior: "smooth" });
-                }}
-                className={`block text-caption leading-relaxed py-1 pl-3 -ml-3 border-l-2 transition-colors ${
-                  activeSection === item.id
-                    ? "border-accent-gold text-text-primary font-medium"
-                    : "border-transparent text-text-muted hover:text-text-secondary"
-                }`}
-              >
-                {item.label}
-              </a>
-            </li>
-          ))}
-        </ul>
-      </nav>
-
-      {/* Scrollable Content */}
-      <div ref={contentRef} className="flex-1 py-8 pl-8 space-y-10 overflow-y-auto">
+    <div className="flex-1 py-8 px-8 space-y-10 overflow-y-auto">
+      {/* Back button */}
+      <button
+        onClick={() => navigate(-1)}
+        className="flex items-center gap-1.5 text-caption text-text-muted hover:text-text-primary transition-colors"
+      >
+        <i className="ti ti-arrow-left text-sm" />
+        Back
+      </button>
 
         {/* ───── Section 1: Executive Summary ───── */}
         <section id="executive-summary">
@@ -768,6 +710,5 @@ export default function ReportPage() {
         </section>
 
       </div>
-    </div>
   );
 }

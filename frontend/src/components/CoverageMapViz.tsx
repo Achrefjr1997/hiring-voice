@@ -2,9 +2,9 @@ import { AlertTriangle, CheckCircle, Circle } from "lucide-react";
 import type { CoverageMapState } from "../types";
 
 const STATUS_STYLES: Record<string, string> = {
-  COVERED: "bg-green-50 border-green-200",
-  WEAK: "bg-amber-50 border-amber-200",
-  UNEXPLORED: "bg-gray-50 border-gray-200",
+  COVERED: "bg-status-live/10 border-status-live/30",
+  WEAK: "bg-status-warning/10 border-status-warning/30",
+  UNEXPLORED: "bg-surface-raised border-border-default",
 };
 
 const STATUS_ICONS: Record<string, typeof Circle> = {
@@ -14,9 +14,9 @@ const STATUS_ICONS: Record<string, typeof Circle> = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  COVERED: "text-green-500",
-  WEAK: "text-amber-500",
-  UNEXPLORED: "text-gray-300",
+  COVERED: "text-status-live",
+  WEAK: "text-status-warning",
+  UNEXPLORED: "text-text-muted",
 };
 
 export default function CoverageMapViz({
@@ -37,59 +37,58 @@ export default function CoverageMapViz({
   }
 
   return (
-    <div className="rounded-xl border border-gray-200 overflow-hidden">
-      <div className="flex items-center gap-2 px-4 py-2 border-b border-gray-100">
-        <h2 className="text-sm font-medium text-gray-700 flex-1">Coverage Map</h2>
-        {summary && (
-          <span className="text-xs text-gray-500">
-            {summary.must_have_covered}/{summary.must_have_total} MUST_HAVEs
+    <div className="flex flex-col gap-2">
+      {/* Summary header */}
+      {summary && (
+        <div className="flex items-center gap-2 px-1 pt-1">
+          <span className="text-caption text-text-muted">
+            {summary.must_have_covered}/{summary.must_have_total} required
           </span>
-        )}
-      </div>
+        </div>
+      )}
 
-      <div className="p-3 flex flex-col gap-3 max-h-72 overflow-y-auto">
+      {/* Competency grid */}
+      <div className="flex flex-col gap-3">
         {Array.from(domains.entries()).map(([domain, cells]) => (
           <div key={domain}>
-            <h3 className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5 px-1">
+            <h3 className="text-[10px] font-semibold uppercase tracking-wider text-text-muted mb-1.5 px-1">
               {domain}
             </h3>
             <div className="flex flex-col gap-1.5">
               {cells.map(([id, cell]) => {
                 const Icon = STATUS_ICONS[cell.status] ?? Circle;
-                const statusColor = STATUS_COLORS[cell.status] ?? "text-gray-300";
+                const statusColor = STATUS_COLORS[cell.status] ?? "text-text-muted";
                 const confidencePct = Math.round(cell.confidence * 100);
 
                 return (
                   <div
                     key={id}
-                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-xs transition-colors ${STATUS_STYLES[cell.status] ?? "bg-gray-50"}`}
+                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-radius-card border text-caption transition-colors ${STATUS_STYLES[cell.status] ?? "bg-surface-raised"}`}
                   >
                     <Icon size={14} className={`shrink-0 ${statusColor}`} />
-                    <span className="flex-1 font-medium text-gray-700 truncate">
+                    <span className="flex-1 font-medium text-text-primary truncate">
                       {cell.name}
                     </span>
                     {cell.classification === "MUST_HAVE" && (
-                      <span className="text-[9px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded shrink-0">
+                      <span className="text-[9px] font-semibold text-accent-gold bg-accent-gold/10 px-1.5 py-0.5 rounded-radius-card shrink-0">
                         M
                       </span>
                     )}
-                    <div className="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden shrink-0">
+                    <div className="w-14 h-1.5 bg-surface-raised rounded-full overflow-hidden shrink-0">
                       <div
                         className={`h-full rounded-full transition-all duration-500 ${
-                          cell.status === "COVERED"
-                            ? "bg-green-400"
-                            : cell.status === "WEAK"
-                              ? "bg-amber-400"
-                              : "bg-gray-300"
+                          cell.status === "COVERED" ? "bg-status-live"
+                            : cell.status === "WEAK" ? "bg-status-warning"
+                              : "bg-border-default"
                         }`}
                         style={{ width: `${confidencePct}%` }}
                       />
                     </div>
-                    <span className="text-[10px] font-mono text-gray-400 w-6 text-right shrink-0">
+                    <span className="text-[10px] font-mono text-text-muted w-6 text-right shrink-0">
                       {confidencePct}%
                     </span>
                     {cell.integrityFlagged && (
-                      <AlertTriangle size={12} className="text-red-400 shrink-0" />
+                      <AlertTriangle size={12} className="text-status-alert shrink-0" />
                     )}
                   </div>
                 );

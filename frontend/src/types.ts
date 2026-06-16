@@ -73,7 +73,8 @@ export type VoiceHireEventType =
   | "INTEGRITY_VIOLATION"
   | "INTEGRITY_PAUSED"
   | "INTEGRITY_RESUMED"
-  | "INTEGRITY_TERMINATED";
+  | "INTEGRITY_TERMINATED"
+  | "SESSION_END";
 
 export interface ParsedVoiceHireEvent {
   bandMessageId: string;

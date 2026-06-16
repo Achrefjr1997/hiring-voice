@@ -8,6 +8,13 @@ interface SessionRow {
   violation_count: number;
 }
 
+const STATUS_BADGES: Record<string, string> = {
+  completed: "bg-status-live/20 text-status-live border-status-live/30",
+  ENDED: "bg-surface-raised text-text-muted border-border-default",
+  READY: "bg-status-info/20 text-status-info border-status-info/30",
+  active: "bg-status-info/20 text-status-info border-status-info/30",
+};
+
 export default function SessionHistoryList({
   sessions,
   onCreateNew,
@@ -19,56 +26,51 @@ export default function SessionHistoryList({
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-gray-800">Session History</h2>
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-h3 font-heading text-text-primary">Session History</h2>
         <button
           onClick={onCreateNew}
-          className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
+          className="px-4 py-2 rounded-radius-card bg-accent-gold text-bg-primary text-caption font-semibold hover:brightness-110 transition-all"
         >
           + New Interview
         </button>
       </div>
 
       {sessions.length === 0 ? (
-        <div className="text-center py-12">
-          <p className="text-sm text-gray-400 italic">No past sessions.</p>
-          <p className="text-xs text-gray-300 mt-1">Create your first interview to get started.</p>
+        <div className="text-center py-16 bg-surface-default border border-border-default rounded-radius-card">
+          <p className="text-body text-text-muted italic">No past sessions.</p>
+          <p className="text-caption text-text-muted mt-1">Create your first interview to get started.</p>
         </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="bg-surface-default border border-border-default rounded-radius-card overflow-hidden">
+          <table className="w-full text-body">
             <thead>
-              <tr className="border-b border-gray-200 text-left text-gray-500 text-xs uppercase tracking-wide">
-                <th className="py-3 pr-4">Date</th>
-                <th className="py-3 pr-4">Candidate</th>
-                <th className="py-3 pr-4">Status</th>
-                <th className="py-3 text-right">Violations</th>
+              <tr className="border-b border-border-default text-caption text-text-muted uppercase tracking-wide">
+                <th className="py-3 px-4 text-left font-medium">Date</th>
+                <th className="py-3 px-4 text-left font-medium">Candidate</th>
+                <th className="py-3 px-4 text-left font-medium">Status</th>
+                <th className="py-3 px-4 text-right font-medium">Violations</th>
               </tr>
             </thead>
             <tbody>
               {sessions.map((s) => (
                 <tr
                   key={s.id}
-                  className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors"
-                  onClick={() => navigate(`/history/${s.id}`)}
+                  className="border-b border-border-default hover:bg-surface-hover cursor-pointer transition-colors last:border-0"
+                  onClick={() => navigate(`/report/${s.id}?back=history`)}
                 >
-                  <td className="py-3 pr-4 text-gray-600">
+                  <td className="py-3 px-4 text-text-secondary">
                     {s.created_at ? new Date(s.created_at * 1000).toLocaleDateString() : "—"}
                   </td>
-                  <td className="py-3 pr-4 font-medium text-gray-800">
+                  <td className="py-3 px-4 font-medium text-text-primary">
                     {s.candidate_name || "—"}
                   </td>
-                  <td className="py-3 pr-4">
-                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                      s.status === "completed" ? "bg-green-100 text-green-700"
-                        : s.status === "ENDED" ? "bg-gray-100 text-gray-600"
-                          : s.status === "READY" || s.status === "active" ? "bg-blue-100 text-blue-700"
-                            : "bg-yellow-100 text-yellow-700"
-                    }`}>
+                  <td className="py-3 px-4">
+                    <span className={`inline-block px-2 py-0.5 rounded-radius-card text-caption font-medium border ${STATUS_BADGES[s.status] ?? "bg-surface-raised text-text-muted border-border-default"}`}>
                       {s.status}
                     </span>
                   </td>
-                  <td className="py-3 text-right text-gray-600">{s.violation_count}</td>
+                  <td className="py-3 px-4 text-right text-text-secondary">{s.violation_count}</td>
                 </tr>
               ))}
             </tbody>

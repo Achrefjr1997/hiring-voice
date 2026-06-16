@@ -16,6 +16,8 @@ FILLER_PHRASES = [
 ]
 
 AUDIO_DIR = os.path.join(os.path.dirname(__file__), "..", "audio_output")
+if os.path.isdir("/app/audio_output"):
+    AUDIO_DIR = "/app/audio_output"
 
 
 class VoicePersona(BandAgent):

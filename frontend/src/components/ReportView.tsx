@@ -1,4 +1,5 @@
-﻿import { useEffect, useState } from "react";
+﻿import { useEffect, useRef, useState, useMemo } from "react";
+import { Monitor, ArrowLeftRight, EyeOff, AlertTriangle, ChevronDown, ChevronRight, X } from "lucide-react";
 import type { HiringDecision, IntegrityViolation, EnforcementConfig } from "../types";
 
 interface ConversationEntry {
@@ -57,24 +58,107 @@ interface ReportViewProps {
   initialReport?: ReportData | null;
 }
 
-function statusColor(status: string): string {
-  switch (status) {
-    case "COVERED": return "bg-green-100 border-green-400 text-green-800";
-    case "WEAK": return "bg-yellow-100 border-yellow-400 text-yellow-800";
-    case "INSUFFICIENT": return "bg-red-100 border-red-400 text-red-800";
-    case "EXHAUSTED": return "bg-orange-100 border-orange-400 text-orange-800";
-    default: return "bg-gray-100 border-gray-300 text-gray-600";
-  }
+const SECTION_NAV = [
+  { id: "executive-summary", label: "Executive summary" },
+  { id: "competency-scorecard", label: "Competency scorecard" },
+  { id: "evidence-timeline", label: "Evidence timeline" },
+  { id: "full-transcript", label: "Full transcript" },
+  { id: "committee-deliberation", label: "Committee deliberation" },
+  { id: "integrity-audit", label: "Integrity audit" },
+  { id: "session-metadata", label: "Session metadata" },
+] as const;
+
+type VerdictState = "PENDING" | "STRONG_NO_HIRE" | "NO_HIRE" | "HIRE" | "STRONG_HIRE";
+
+const VERDICT_STYLES: Record<VerdictState, { bg: string; border: string; text: string }> = {
+  PENDING: { bg: "bg-red-50", border: "border-red-200", text: "text-red-600" },
+  STRONG_NO_HIRE: { bg: "bg-red-50", border: "border-red-200", text: "text-red-800" },
+  NO_HIRE: { bg: "bg-red-50", border: "border-red-200", text: "text-red-700" },
+  HIRE: { bg: "bg-green-50", border: "border-green-200", text: "text-green-700" },
+  STRONG_HIRE: { bg: "bg-green-50", border: "border-green-200", text: "text-green-900" },
+};
+
+const VERDICT_LABELS: Record<VerdictState, string> = {
+  PENDING: "PENDING",
+  STRONG_NO_HIRE: "Strong no hire",
+  NO_HIRE: "No hire",
+  HIRE: "Hire recommended",
+  STRONG_HIRE: "Strong hire",
+};
+
+const VIOLATION_ICONS: Record<string, typeof Monitor> = {
+  EXIT_FULLSCREEN: Monitor,
+  TAB_SWITCH: ArrowLeftRight,
+  WINDOW_BLUR: EyeOff,
+};
+
+const VIOLATION_LABELS: Record<string, string> = {
+  EXIT_FULLSCREEN: "Exit fullscreen",
+  TAB_SWITCH: "Tab switch",
+  WINDOW_BLUR: "Window blur",
+};
+
+function getInitialVerdict(decision: HiringDecision | null): VerdictState {
+  if (!decision) return "PENDING";
+  const r = decision.final_recommendation;
+  if (r === "STRONG_HIRE") return "STRONG_HIRE";
+  if (r === "HIRE") return "HIRE";
+  if (r === "NO_HIRE") return "NO_HIRE";
+  if (r === "STRONG_NO_HIRE") return "STRONG_NO_HIRE";
+  return "PENDING";
 }
 
-function classificationBadge(cls: string): { label: string; style: string } {
-  if (cls === "MUST_HAVE") return { label: "Required", style: "bg-blue-100 text-blue-700" };
-  return { label: "Nice-to-have", style: "bg-purple-100 text-purple-700" };
+function formatHHMMSS(ts: number): string {
+  return new Date(ts * 1000).toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+}
+
+function formatDuration(seconds: number): string {
+  const totalSeconds = Math.round(seconds);
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+function truncateSentences(text: string, max: number): string {
+  const parts = text.match(/[^.!?]*[.!?]+/g);
+  if (!parts || parts.length <= max) return text;
+  return parts.slice(0, max).join("") + " ...";
+}
+
+function renderDeliberationText(text: string): React.ReactNode[] {
+  const sanitized = text
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .trim();
+  const paragraphs = sanitized.split(/\n\s*\n/);
+  return paragraphs.map((p, i) => (
+    <p key={i} className="text-xs text-gray-600 leading-relaxed" style={{ lineHeight: "1.55" }}>
+      {p.split(/\n/).map((line, j) => (
+        <span key={j}>
+          {j > 0 && <br />}
+          <span dangerouslySetInnerHTML={{ __html: line }} />
+        </span>
+      ))}
+    </p>
+  ));
 }
 
 export default function ReportView({ sessionId, decision, deliberationFullText, onClose, initialReport }: ReportViewProps) {
   const [report, setReport] = useState<ReportData | null>(initialReport ?? null);
   const [loading, setLoading] = useState(!initialReport);
+  const [activeSection, setActiveSection] = useState("executive-summary");
+  const [showAllCompetencies, setShowAllCompetencies] = useState(false);
+  const [showAllEvidence, setShowAllEvidence] = useState(false);
+  const [showAllViolations, setShowAllViolations] = useState(false);
+  const [transcriptExpanded, setTranscriptExpanded] = useState(false);
+  const [deliberationExpanded, setDeliberationExpanded] = useState(true);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const barAnimated = useRef(false);
 
   useEffect(() => {
     if (initialReport) return;
@@ -84,10 +168,89 @@ export default function ReportView({ sessionId, decision, deliberationFullText, 
       .catch(() => setLoading(false));
   }, [sessionId, initialReport]);
 
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content || !report) return;
+    const sections = content.querySelectorAll<HTMLElement>("section[id]");
+    if (!sections.length) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        let best: string | null = null;
+        let bestRatio = 0;
+        for (const entry of entries) {
+          if (entry.isIntersecting && entry.intersectionRatio > bestRatio) {
+            bestRatio = entry.intersectionRatio;
+            best = entry.target.id;
+          }
+        }
+        if (best) setActiveSection(best);
+      },
+      { root: content, rootMargin: "-10% 0px -60% 0px", threshold: [0, 0.1, 0.2, 0.3, 0.4, 0.5] }
+    );
+    sections.forEach((s) => observer.observe(s));
+    return () => observer.disconnect();
+  }, [report]);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  const verdict = useMemo(() => getInitialVerdict(decision), [decision]);
+  const isPositive = verdict === "HIRE" || verdict === "STRONG_HIRE";
+  const isPending = verdict === "PENDING";
+
+  const scores = useMemo(() => report?.competency_scorecard ?? [], [report]);
+  const evidence = useMemo(() => report?.evidence_portfolio ?? [], [report]);
+  const history = useMemo(() => report?.conversation_history ?? [], [report]);
+  const violations = useMemo(() => report?.integrity_violations ?? [], [report]);
+  const enforcement = useMemo(() => report?.enforcement_config ?? null, [report]);
+  const summary = useMemo(() => report?.coverage_summary ?? { total: 0, covered: 0, must_have_total: 0, must_have_covered: 0 }, [report]);
+
+  const displayScores = useMemo(() => {
+    if (scores.length > 5 && !showAllCompetencies) return scores.slice(0, 4);
+    return scores;
+  }, [scores, showAllCompetencies]);
+
+  const displayEvidence = useMemo(() => {
+    if (evidence.length > 3 && !showAllEvidence) return evidence.slice(0, 3);
+    return evidence;
+  }, [evidence, showAllEvidence]);
+
+  const displayViolations = useMemo(() => {
+    if (violations.length > 3 && !showAllViolations) return violations.slice(0, 3);
+    return violations;
+  }, [violations, showAllViolations]);
+
+  const transcriptDuration = useMemo(() => {
+    if (!history.length) return 0;
+    const ts = history.map((e) => e.timestamp);
+    return Math.max(0, Math.max(...ts) - Math.min(...ts));
+  }, [history]);
+
+  const deliberationText = deliberationFullText || decision?.deliberation_transcript || null;
+
+  const violationIcon = (type: string) => {
+    const key = Object.keys(VIOLATION_ICONS).find(
+      (k) => type.toUpperCase() === k || type.toUpperCase().replace(/\s/g, "_") === k
+    );
+    return key ? VIOLATION_ICONS[key] : AlertTriangle;
+  };
+
+  const violationLabel = (type: string) => {
+    const key = Object.keys(VIOLATION_LABELS).find(
+      (k) => type.toUpperCase() === k || type.toUpperCase().replace(/\s/g, "_") === k
+    );
+    return key ? VIOLATION_LABELS[key] : type.replace(/_/g, " ");
+  };
+
   if (loading) {
     return (
-      <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center" onClick={onClose}>
-        <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-8" onClick={(e) => e.stopPropagation()}>
+      <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={onClose}>
+        <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-8 text-center" onClick={(e) => e.stopPropagation()}>
           <p className="text-sm text-gray-400">Loading report…</p>
         </div>
       </div>
@@ -96,231 +259,472 @@ export default function ReportView({ sessionId, decision, deliberationFullText, 
 
   if (!report) {
     return (
-      <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center" onClick={onClose}>
-        <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-8" onClick={(e) => e.stopPropagation()}>
+      <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={onClose}>
+        <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-8 text-center" onClick={(e) => e.stopPropagation()}>
           <p className="text-sm text-red-500">Failed to load report.</p>
-          <button onClick={onClose} className="mt-2 text-sm text-gray-500 underline">Close</button>
+          <button onClick={onClose} className="mt-3 text-sm text-gray-500 underline">Close</button>
         </div>
       </div>
     );
   }
 
-  const {
-    competency_scorecard,
-    coverage_summary,
-    evidence_portfolio,
-    conversation_history,
-    integrity_violations,
-    enforcement_config,
-  } = report;
-
-  const recommendation = decision?.final_recommendation ?? "PENDING";
-  const isHire = recommendation === "STRONG_HIRE" || recommendation === "HIRE";
-
   return (
-    <div className="fixed inset-0 z-50 bg-black/30 flex items-start justify-center pt-8 pb-8" onClick={onClose}>
+    <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={onClose}>
       <div
-        className="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto"
+        className="flex flex-col max-w-[860px] w-full max-h-[90vh] bg-white rounded-lg border-[0.5px] border-gray-200 shadow-xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="sticky top-0 bg-white border-b border-gray-200 flex items-center justify-between px-6 py-3 z-10">
-          <h1 className="text-lg font-semibold text-gray-900">Interview Report</h1>
-          <button onClick={onClose} className="text-sm text-gray-500 hover:text-gray-700">&times; Close</button>
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-3 border-b border-gray-100">
+          <h1 className="text-lg font-semibold text-gray-900">Interview report</h1>
+          <button
+            onClick={onClose}
+            className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <X size={14} />
+            Close
+          </button>
         </div>
 
-        <div className="p-6 space-y-6">
-          <section>
-            <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Executive Summary</h2>
-            <div className={`rounded-lg border-2 p-4 ${isHire ? "border-green-400 bg-green-50" : "border-red-400 bg-red-50"}`}>
-              <div className="flex items-center gap-3 mb-2">
-                <span className="text-2xl">{isHire ? "\u2705" : "\u274C"}</span>
-                <span className={`text-lg font-bold ${isHire ? "text-green-800" : "text-red-800"}`}>
-                  {recommendation.replace(/_/g, " ")}
-                </span>
-              </div>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <p className="text-gray-500">Must-haves covered</p>
-                  <p className="font-semibold">{coverage_summary.must_have_covered}/{coverage_summary.must_have_total}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500">Total competencies</p>
-                  <p className="font-semibold">{coverage_summary.covered}/{coverage_summary.total}</p>
-                </div>
-              </div>
-            </div>
-          </section>
+        {/* Body */}
+        <div className="flex flex-1 overflow-hidden">
+          {/* Sidebar */}
+          <nav className="w-[180px] flex-shrink-0 border-r border-gray-100 p-4 overflow-hidden">
+            <ul className="space-y-2">
+              {SECTION_NAV.map((item) => (
+                <li key={item.id}>
+                  <a
+                    href={`#${item.id}`}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      contentRef.current?.querySelector(`#${item.id}`)?.scrollIntoView({ behavior: "smooth" });
+                    }}
+                    className={`block text-xs leading-relaxed py-1 pl-3 -ml-3 border-l-2 transition-colors ${
+                      activeSection === item.id
+                        ? "border-[#C9A84C] text-gray-900 font-medium"
+                        : "border-transparent text-gray-400 hover:text-gray-600"
+                    }`}
+                  >
+                    {item.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </nav>
 
-          <section>
-            <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Competency Scorecard</h2>
-            <div className="grid gap-2">
-              {competency_scorecard.map((c) => {
-                const badge = classificationBadge(c.classification);
-                return (
-                  <div key={c.id} className="flex items-center gap-3 px-3 py-2 rounded-lg border border-gray-200">
-                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${badge.style}`}>{badge.label}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">{c.name}</p>
-                      <p className="text-[11px] text-gray-400">{c.domain}</p>
-                    </div>
-                    <div className={`text-xs font-medium px-2 py-0.5 rounded border ${statusColor(c.status)}`}>
-                      {c.status}
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-semibold text-gray-800">{c.confidence}%</p>
-                      <p className="text-[10px] text-gray-400">{c.evidence_count} ev</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
+          {/* Scrollable Content */}
+          <div ref={contentRef} className="flex-1 overflow-y-auto px-6 py-6 space-y-10">
 
-          <section>
-            <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Evidence Timeline</h2>
-            {evidence_portfolio.length === 0 ? (
-              <p className="text-sm text-gray-400 italic">No evidence collected.</p>
-            ) : (
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {[...evidence_portfolio].reverse().map((ev, i) => {
-                  const tags = ev.competencies_tagged ?? [];
-                  const primaryTag = tags[0];
-                  return (
-                    <div key={ev.evidence_id ?? i} className="flex gap-3 px-3 py-2 rounded-lg border border-gray-100">
-                      <div className="flex flex-col items-center gap-1">
-                        <div className={`w-2 h-2 rounded-full ${primaryTag?.polarity === "POSITIVE" ? "bg-green-400" : primaryTag?.polarity === "NEGATIVE" ? "bg-red-400" : "bg-gray-300"}`} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        {tags.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mb-1">
-                            {tags.map((t, j) => (
-                              <span key={j} className={`text-[10px] font-medium px-1 py-0.5 rounded ${
-                                t.polarity === "POSITIVE" ? "bg-green-50 text-green-700"
-                                  : t.polarity === "NEGATIVE" ? "bg-red-50 text-red-700"
-                                    : "bg-gray-50 text-gray-500"
-                              }`}>
-                                {t.competency_id}: {Math.round(t.confidence * 100)}%
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                        {ev.raw_transcript && (
-                          <p className="text-xs text-gray-600 italic truncate">&ldquo;{ev.raw_transcript.slice(0, 150)}&hellip;&rdquo;</p>
-                        )}
-                        {ev.overall_confidence !== undefined && (
-                          <p className="text-[11px] text-gray-400 mt-0.5">Confidence: {Math.round(ev.overall_confidence * 100)}%</p>
-                        )}
-                      </div>
+            {/* ───── Section 1: Executive Summary ───── */}
+            <section id="executive-summary">
+              <div className={`rounded-lg border ${VERDICT_STYLES[verdict].border} ${VERDICT_STYLES[verdict].bg} p-4`}>
+                <div className="flex items-center gap-3">
+                  {isPending ? (
+                    <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                      <X size={16} className="text-red-600" />
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-
-          <section>
-            <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Full Interview Transcript</h2>
-            {!conversation_history || conversation_history.length === 0 ? (
-              <p className="text-sm text-gray-400 italic">No conversation history available.</p>
-            ) : (
-              <div className="space-y-4 max-h-96 overflow-y-auto">
-                {conversation_history.map((entry, i) => (
-                  <div key={i} className={`p-4 rounded ${entry.type === "probe" ? "bg-blue-50" : "bg-green-50"}`}>
-                    <div className="text-sm text-gray-500">
-                      {new Date(entry.timestamp * 1000).toLocaleTimeString()}
-                      {entry.competency_name && ` - ${entry.competency_name}`}
+                  ) : isPositive ? (
+                    <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                      <span className="text-green-700 text-lg leading-none">✓</span>
                     </div>
-                    <div className="font-semibold mt-1">
-                      {entry.type === "probe" ? "AI:" : "Candidate:"}
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                      <X size={16} className="text-red-800" />
                     </div>
-                    <div className="mt-2">{entry.text}</div>
-                    {entry.audio_url && (
-                      <audio controls src={entry.audio_url} className="mt-2 w-full" />
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-
-          <section>
-            <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Committee Deliberation</h2>
-            {deliberationFullText ? (
-              <div className="grid grid-cols-2 gap-4">
-                <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
-                  <h3 className="text-xs font-semibold text-blue-800 uppercase mb-2">Advocate</h3>
-                  <p className="text-xs text-blue-900 whitespace-pre-wrap leading-relaxed">{deliberationFullText.advocate}</p>
-                </div>
-                <div className="rounded-lg border border-red-200 bg-red-50 p-3">
-                  <h3 className="text-xs font-semibold text-red-800 uppercase mb-2">Critic</h3>
-                  <p className="text-xs text-red-900 whitespace-pre-wrap leading-relaxed">{deliberationFullText.critic}</p>
-                </div>
-              </div>
-            ) : decision?.deliberation_transcript ? (
-              <div className="grid grid-cols-2 gap-4">
-                <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
-                  <h3 className="text-xs font-semibold text-blue-800 uppercase mb-2">Advocate</h3>
-                  <p className="text-xs text-blue-900 whitespace-pre-wrap leading-relaxed">{decision.deliberation_transcript.advocate}</p>
-                </div>
-                <div className="rounded-lg border border-red-200 bg-red-50 p-3">
-                  <h3 className="text-xs font-semibold text-red-800 uppercase mb-2">Critic</h3>
-                  <p className="text-xs text-red-900 whitespace-pre-wrap leading-relaxed">{decision.deliberation_transcript.critic}</p>
-                </div>
-              </div>
-            ) : (
-              <p className="text-sm text-gray-400 italic">Deliberation text not available.</p>
-            )}
-          </section>
-
-          <section>
-            <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Integrity Audit</h2>
-            {!integrity_violations || integrity_violations.length === 0 ? (
-              <p className="text-sm text-gray-400 italic">No integrity violations detected.</p>
-            ) : (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="font-medium text-gray-700">Enforcement:</span>
-                  <span className="text-xs px-2 py-0.5 rounded bg-gray-100 font-mono">{enforcement_config?.level ?? "N/A"}</span>
-                  {enforcement_config?.demoMode && (
-                    <span className="text-xs px-2 py-0.5 rounded bg-amber-100 text-amber-700 font-medium">Demo Mode</span>
                   )}
+                  <span className={`text-sm font-medium ${VERDICT_STYLES[verdict].text}`}>
+                    {VERDICT_LABELS[verdict]}
+                  </span>
                 </div>
-                <p className="text-xs text-gray-500">{integrity_violations.length} violation{integrity_violations.length !== 1 ? "s" : ""} recorded</p>
-                <div className="space-y-1 max-h-48 overflow-y-auto">
-                  {[...integrity_violations].reverse().map((v, i) => (
-                    <div key={i} className="flex items-center gap-2 px-3 py-1.5 rounded border border-gray-100 text-xs">
-                      <span className={`w-2 h-2 rounded-full ${v.severity === "severe" ? "bg-red-400" : "bg-amber-400"}`} />
-                      <span className="font-medium text-gray-700">{v.type.replace(/_/g, " ")}</span>
-                      <span className="text-gray-400 ml-auto">{new Date(v.timestamp).toLocaleTimeString()}</span>
-                      <span className="text-gray-400 font-mono">{v.points}pt</span>
+                {isPending ? (
+                  <div className="flex gap-6 mt-3">
+                    <div>
+                      <p className="text-[11px] text-gray-400">Must-haves covered</p>
+                      <p className="text-xl font-medium text-gray-400">—</p>
+                    </div>
+                    <div className="w-[0.5px] bg-gray-200" />
+                    <div>
+                      <p className="text-[11px] text-gray-400">Total competencies</p>
+                      <p className="text-xl font-medium text-gray-400">—</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex gap-6 mt-3">
+                    <div>
+                      <p className="text-[11px] text-gray-500">Must-haves covered</p>
+                      <p className="text-xl font-medium text-gray-900">
+                        {summary.must_have_covered}/{summary.must_have_total}
+                      </p>
+                    </div>
+                    <div className="w-[0.5px] bg-gray-200" />
+                    <div>
+                      <p className="text-[11px] text-gray-500">Total competencies</p>
+                      <p className="text-xl font-medium text-gray-900">
+                        {summary.covered}/{summary.total}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
+
+            {/* ───── Section 2: Competency Scorecard ───── */}
+            <section id="competency-scorecard">
+              <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Competency Scorecard</h2>
+              {scores.length === 0 ? (
+                <p className="text-sm text-gray-400 italic">No competency data available.</p>
+              ) : (
+                <div>
+                  {displayScores.map((c) => (
+                    <div
+                      key={c.id}
+                      className="flex items-center gap-3 py-2.5 border-b-[0.5px] border-gray-100 last:border-b-0"
+                    >
+                      {c.classification === "MUST_HAVE" && (
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 flex-shrink-0">
+                          Required
+                        </span>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[13px] font-medium text-gray-900 truncate">{c.name}</p>
+                        <p className="text-[11px] text-gray-400">{c.domain}</p>
+                      </div>
+                      <span
+                        className={`text-[10px] font-medium px-1.5 py-0.5 rounded flex-shrink-0 ${
+                          c.status === "EXHAUSTED"
+                            ? "bg-red-50 text-red-700"
+                            : c.status === "UNEXPLORED"
+                              ? "bg-gray-50 text-gray-400"
+                              : c.status === "COVERED"
+                                ? "bg-green-50 text-green-700"
+                                : c.status === "WEAK"
+                                  ? "bg-amber-50 text-amber-700"
+                                  : "bg-red-50 text-red-700"
+                        }`}
+                      >
+                        {c.status}
+                      </span>
+                      <div className="flex items-center gap-2 w-[100px] justify-end flex-shrink-0">
+                        <span className="text-xs font-medium text-gray-900 w-8 text-right">{c.confidence}%</span>
+                        <div className="w-16 h-[3px] rounded-full bg-gray-100 overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all duration-400 ease-out"
+                            style={{
+                              width: `${c.confidence}%`,
+                              backgroundColor: "#C9A84C",
+                            }}
+                          />
+                        </div>
+                      </div>
                     </div>
                   ))}
+                  {scores.length > 5 && (
+                    <button
+                      onClick={() => setShowAllCompetencies(!showAllCompetencies)}
+                      className="mt-2 text-xs font-medium text-[#C9A84C] hover:text-[#b8993a] transition-colors"
+                    >
+                      {showAllCompetencies ? `Show less` : `Show all ${scores.length} competencies`}
+                    </button>
+                  )}
+                </div>
+              )}
+            </section>
+
+            {/* ───── Section 3: Evidence Timeline ───── */}
+            <section id="evidence-timeline">
+              <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Evidence Timeline</h2>
+              {evidence.length === 0 ? (
+                <p className="text-sm text-gray-400 italic">No evidence collected.</p>
+              ) : (
+                <div>
+                  {displayEvidence.map((ev, i) => {
+                    const tags = ev.competencies_tagged ?? [];
+                    const hasTranscript = ev.raw_transcript && ev.raw_transcript.trim().length > 0;
+                    return (
+                      <div
+                        key={ev.evidence_id ?? i}
+                        className={`py-2.5 border-b-[0.5px] last:border-b-0 ${
+                          hasTranscript ? "border-l-2 border-[#C9A84C] pl-3" : "border-l-2 border-gray-200 pl-3"
+                        }`}
+                      >
+                        {hasTranscript ? (
+                          <p className="text-[13px] italic text-gray-900 leading-relaxed">
+                            &ldquo;{ev.raw_transcript!.trim()}&rdquo;
+                          </p>
+                        ) : (
+                          <p className="text-[13px] text-gray-400 italic">[No verbal response recorded]</p>
+                        )}
+                        <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                          {ev.overall_confidence !== undefined && ev.overall_confidence < 0.5 && (
+                            <span className="flex items-center gap-1 text-xs text-red-600">
+                              <AlertTriangle size={12} />
+                              {Math.round(ev.overall_confidence * 100)}% confidence
+                            </span>
+                          )}
+                          {ev.overall_confidence !== undefined && ev.overall_confidence >= 0.5 && (
+                            <span className="text-xs text-gray-400">
+                              Confidence: {Math.round(ev.overall_confidence * 100)}%
+                            </span>
+                          )}
+                          {tags.map((t, j) => (
+                            <span
+                              key={j}
+                              className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                                t.polarity === "POSITIVE"
+                                  ? "bg-green-50 text-green-700"
+                                  : t.polarity === "NEGATIVE"
+                                    ? "bg-red-50 text-red-700"
+                                    : "bg-gray-50 text-gray-500"
+                              }`}
+                            >
+                              {t.competency_id}: {Math.round(t.confidence * 100)}%
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {evidence.length > 3 && (
+                    <button
+                      onClick={() => setShowAllEvidence(!showAllEvidence)}
+                      className="mt-2 text-xs font-medium text-[#C9A84C] hover:text-[#b8993a] transition-colors"
+                    >
+                      {showAllEvidence ? "Show less" : `Show all ${evidence.length} items`}
+                    </button>
+                  )}
+                </div>
+              )}
+            </section>
+
+            {/* ───── Section 4: Full Transcript ───── */}
+            <section id="full-transcript">
+              <button
+                onClick={() => setTranscriptExpanded(!transcriptExpanded)}
+                className="flex items-center justify-between w-full text-left"
+              >
+                <div>
+                  <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+                    Full Interview Transcript
+                  </h2>
+                  {!transcriptExpanded && (
+                    <p className="text-[11px] text-gray-400 mt-0.5">
+                      {formatDuration(transcriptDuration)} &middot; {history.length} turn{history.length !== 1 ? "s" : ""}
+                    </p>
+                  )}
+                </div>
+                <span className="text-gray-300">
+                  {transcriptExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                </span>
+              </button>
+
+              {transcriptExpanded && (
+                <div className="mt-3 space-y-3">
+                  <p className="text-[11px] text-gray-400">
+                    {formatDuration(transcriptDuration)} &middot; {history.length} turn{history.length !== 1 ? "s" : ""}
+                  </p>
+                  {history.length === 0 ? (
+                    <p className="text-sm text-gray-400 italic">No conversation history available.</p>
+                  ) : (
+                    <div>
+                      {(() => {
+                        let lastCompetency = "";
+                        return history.map((entry, i) => {
+                          const isProbe = entry.type === "probe" || entry.type === "ai";
+                          const isCandidate = entry.type === "response" || entry.type === "candidate";
+                          const isNewCompetency = isProbe && entry.competency_name && entry.competency_name !== lastCompetency;
+                          if (isNewCompetency && entry.competency_name) {
+                            lastCompetency = entry.competency_name;
+                          }
+                          const hasText = entry.text && entry.text.trim().length > 0;
+                          return (
+                            <div key={i} className="mb-2">
+                              {isNewCompetency && entry.competency_name && (
+                                <p className="text-[10px] font-medium uppercase tracking-wider text-[#C9A84C] mb-1">
+                                  {entry.competency_name}
+                                </p>
+                              )}
+                              <div className="flex items-start gap-2">
+                                <span className="text-[11px] font-mono text-gray-400 flex-shrink-0 mt-0.5">
+                                  {formatHHMMSS(entry.timestamp)}
+                                </span>
+                                <div className={`flex-1 min-w-0 ${isProbe ? "bg-gray-50 rounded-lg px-3 py-2" : "py-1"}`}>
+                                  {isCandidate && !hasText ? (
+                                    <p className="text-[13px] text-gray-400 italic">[No response]</p>
+                                  ) : (
+                                    <p className="text-[13px] text-gray-900 leading-relaxed whitespace-pre-wrap">
+                                      {entry.text}
+                                    </p>
+                                  )}
+                                  {isCandidate && entry.audio_url && (
+                                    <audio controls src={entry.audio_url} className="mt-1.5 w-full h-8" />
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  )}
+                </div>
+              )}
+            </section>
+
+            {/* ───── Section 5: Committee Deliberation ───── */}
+            <section id="committee-deliberation">
+              <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Committee Deliberation</h2>
+              {!deliberationText ? (
+                <p className="text-sm text-gray-400 italic">Deliberation text not available.</p>
+              ) : (
+                <div>
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Advocate */}
+                    <div className="rounded-lg border border-green-200 bg-green-50/50 p-3">
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <span className="w-2 h-2 rounded-full bg-green-500" />
+                        <span className="text-[11px] font-medium uppercase tracking-wider text-gray-400">Advocate</span>
+                      </div>
+                      <p className={`text-[13px] font-medium ${isPositive ? "text-green-700" : "text-red-800"}`}>
+                        {verdict === "STRONG_HIRE" || verdict === "HIRE" ? "Strong hire" : "Hire"}
+                      </p>
+                      <div className="mt-1.5">
+                        {deliberationExpanded
+                          ? renderDeliberationText(deliberationText.advocate)
+                          : <p className="text-xs text-gray-600 leading-relaxed" style={{ lineHeight: "1.55" }}>{truncateSentences(deliberationText.advocate, 4)}</p>
+                        }
+                      </div>
+                    </div>
+                    {/* Critic */}
+                    <div className="rounded-lg border border-red-200 bg-red-50/50 p-3">
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <span className="w-2 h-2 rounded-full bg-red-500" />
+                        <span className="text-[11px] font-medium uppercase tracking-wider text-gray-400">Critic</span>
+                      </div>
+                      <p className={`text-[13px] font-medium ${!isPositive ? "text-green-700" : "text-red-800"}`}>
+                        No hire
+                      </p>
+                      <div className="mt-1.5">
+                        {deliberationExpanded
+                          ? renderDeliberationText(deliberationText.critic)
+                          : <p className="text-xs text-gray-600 leading-relaxed" style={{ lineHeight: "1.55" }}>{truncateSentences(deliberationText.critic, 4)}</p>
+                        }
+                      </div>
+                    </div>
+                  </div>
+                  {/* Consensus strip */}
+                  <div className="mt-3 bg-gray-50 rounded-lg px-3 py-2.5 flex items-center gap-3">
+                    <span className="text-[11px] text-gray-400 font-medium">Consensus</span>
+                    <span
+                      className={`text-xs font-medium ${
+                        !decision?.consensus_reached
+                          ? "text-red-600"
+                          : isPositive
+                            ? "text-green-700"
+                            : "text-red-800"
+                      }`}
+                    >
+                      {decision?.consensus_reached
+                        ? isPositive
+                          ? "Hire"
+                          : "No hire"
+                        : "Not reached"}
+                    </span>
+                  </div>
+                  {/* Read full toggle */}
+                  <button
+                    onClick={() => setDeliberationExpanded(!deliberationExpanded)}
+                    className="mt-2 text-xs font-medium text-[#C9A84C] hover:text-[#b8993a] transition-colors"
+                  >
+                    {deliberationExpanded ? "Show less" : "Read full deliberation"}
+                  </button>
+                </div>
+              )}
+            </section>
+
+            {/* ───── Section 6: Integrity Audit ───── */}
+            <section id="integrity-audit">
+              <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Integrity Audit</h2>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-[22px] font-medium text-red-600 leading-none">{violations.length}</span>
+                  <span className="text-[11px] text-gray-400">
+                    violation{violations.length !== 1 ? "s" : ""} recorded
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-gray-400">Enforcement mode</span>
+                  <span className="text-[13px] font-medium text-gray-900">
+                    {enforcement?.level?.replace(/_/g, " ") ?? "N/A"}
+                  </span>
                 </div>
               </div>
-            )}
-          </section>
+              {violations.length === 0 ? (
+                <p className="text-sm text-gray-400 italic">No integrity violations detected.</p>
+              ) : (
+                <div>
+                  {displayViolations.map((v, i) => {
+                    const Icon = violationIcon(v.type);
+                    const isHighSeverity = v.points >= 2;
+                    return (
+                      <div
+                        key={i}
+                        className="flex items-center gap-2 py-2 border-b-[0.5px] border-gray-100 last:border-b-0"
+                      >
+                        <Icon size={14} className={isHighSeverity ? "text-red-500" : "text-gray-300"} />
+                        <span className="text-xs text-gray-900 flex-1">{violationLabel(v.type)}</span>
+                        <span className="text-[11px] font-mono text-gray-400">
+                          {new Date(v.timestamp).toLocaleTimeString("en-GB", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            hour12: false,
+                          })}
+                        </span>
+                        <span className="text-[11px] font-medium text-red-600 w-8 text-right">{v.points}pt</span>
+                      </div>
+                    );
+                  })}
+                  {violations.length > 3 && (
+                    <button
+                      onClick={() => setShowAllViolations(!showAllViolations)}
+                      className="mt-2 text-xs font-medium text-[#C9A84C] hover:text-[#b8993a] transition-colors"
+                    >
+                      {showAllViolations
+                        ? "Show less"
+                        : `+ ${violations.length - 3} more violation${violations.length - 3 !== 1 ? "s" : ""}`}
+                    </button>
+                  )}
+                </div>
+              )}
+            </section>
 
-          <section>
-            <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Session Metadata</h2>
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div className="px-3 py-2 rounded bg-gray-50">
-                <p className="text-gray-500">Session ID</p>
-                <p className="font-mono text-xs">{sessionId}</p>
+            {/* ───── Section 7: Session Metadata ───── */}
+            <section id="session-metadata">
+              <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Session Metadata</h2>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="bg-gray-50 rounded-md px-3 py-2.5">
+                  <p className="text-[11px] text-gray-400">Session ID</p>
+                  <p className="text-[13px] font-medium font-mono text-gray-900">{sessionId}</p>
+                </div>
+                <div className="bg-gray-50 rounded-md px-3 py-2.5">
+                  <p className="text-[11px] text-gray-400">Status</p>
+                  <p className="text-[13px] font-medium font-mono text-gray-900">{report.status ?? "N/A"}</p>
+                </div>
+                <div className="bg-gray-50 rounded-md px-3 py-2.5 col-span-2">
+                  <p className="text-[11px] text-gray-400">Model</p>
+                  <p className="text-[11px] font-medium font-mono text-gray-900 leading-relaxed">
+                    {decision?.model_used ?? (report as any).model_used ?? "N/A"}
+                  </p>
+                </div>
+                <div className="bg-gray-50 rounded-md px-3 py-2.5">
+                  <p className="text-[11px] text-gray-400">Consensus</p>
+                  <p className="text-[13px] font-medium font-mono text-gray-900">
+                    {decision?.consensus_reached ? "Reached" : "Not reached"}
+                  </p>
+                </div>
               </div>
-              <div className="px-3 py-2 rounded bg-gray-50">
-                <p className="text-gray-500">Status</p>
-                <p className="font-medium text-gray-800">{report.status}</p>
-              </div>
-              <div className="px-3 py-2 rounded bg-gray-50">
-                <p className="text-gray-500">Model</p>
-                <p className="font-mono text-xs">{decision?.model_used ?? "N/A"}</p>
-              </div>
-              <div className="px-3 py-2 rounded bg-gray-50">
-                <p className="text-gray-500">Consensus</p>
-                <p className="font-medium text-gray-800">{decision?.consensus_reached ? "Reached" : "Not reached"}</p>
-              </div>
-            </div>
-          </section>
+            </section>
+
+          </div>
         </div>
       </div>
     </div>

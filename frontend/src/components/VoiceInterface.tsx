@@ -34,7 +34,6 @@ export default function VoiceInterface({ events, onAudioReady, sessionStatus }: 
       setTranscript((t) => [...t, { role: "interviewer" as const, text: payload.text, isFiller }]);
       setAiSpeaking(true);
 
-      // Cancel filler if still playing (probe arrived)
       if (!isFiller && fillerRef.current) {
         fillerRef.current.pause();
         fillerRef.current.currentTime = 0;
@@ -120,21 +119,30 @@ export default function VoiceInterface({ events, onAudioReady, sessionStatus }: 
   };
 
   return (
-    <div className="flex flex-col gap-4 w-full max-w-sm">
-      <div className="flex flex-col gap-2 min-h-64 max-h-96 overflow-y-auto">
+    <div className="flex flex-col gap-4 w-full max-w-sm items-center">
+      <div className="flex flex-col gap-2 min-h-64 max-h-96 overflow-y-auto w-full px-2">
+        {transcript.length === 0 && sessionStatus === "active" && (
+          <p className="text-center text-text-muted text-body italic py-8">Waiting for the first question\u2026</p>
+        )}
         {transcript.map((turn, i) => (
           <div key={i} className={turn.role === "interviewer" ? "self-start" : "self-end"}>
             <div
-              className={`rounded-xl px-3 py-2 text-sm max-w-xs ${
+              className={`rounded-radius-card px-3 py-2 text-body max-w-xs ${
                 turn.role === "interviewer"
                   ? turn.isFiller
-                    ? "bg-amber-50 text-amber-800 italic border border-amber-200"
-                    : "bg-gray-100 text-gray-900"
-                  : "bg-blue-100 text-blue-900"
+                    ? "bg-accent-gold/10 text-accent-gold italic border border-accent-gold/20"
+                    : "bg-surface-default text-text-primary border border-border-default"
+                  : "bg-accent-gold/15 text-text-primary"
               }`}
             >
               {turn.text}
-              {turn.isFiller && <span className="ml-2 text-[10px] opacity-60">thinking…</span>}
+              {turn.isFiller && (
+                <span className="inline-flex items-center gap-0.5 ml-2 text-caption opacity-60">
+                  <span className="thinking-dot w-1 h-1 rounded-full bg-current" />
+                  <span className="thinking-dot w-1 h-1 rounded-full bg-current" style={{ animationDelay: "0.2s" }} />
+                  <span className="thinking-dot w-1 h-1 rounded-full bg-current" style={{ animationDelay: "0.4s" }} />
+                </span>
+              )}
             </div>
           </div>
         ))}
@@ -143,19 +151,19 @@ export default function VoiceInterface({ events, onAudioReady, sessionStatus }: 
       <button
         onClick={handleMicClick}
         disabled={aiSpeaking || sessionStatus !== "active"}
-        className={`mx-auto w-20 h-20 rounded-full flex items-center justify-center transition-all duration-200 ${
+        className={`w-20 h-20 rounded-full flex items-center justify-center transition-all duration-200 ${
           isRecording
-            ? "bg-red-100 border-2 border-red-400 scale-110"
-            : "bg-blue-50 border-2 border-blue-200 hover:bg-blue-100"
+            ? "bg-status-alert/10 border-2 border-status-alert scale-110 recording-pulse"
+            : "bg-accent-gold/10 border-2 border-accent-gold/30 hover:bg-accent-gold/20"
         } disabled:opacity-40 disabled:cursor-not-allowed`}
       >
         {isRecording
-          ? <MicOff size={32} className="text-red-500" />
-          : <Mic size={32} className="text-blue-500" />}
+          ? <MicOff size={32} className="text-status-alert" />
+          : <Mic size={32} className="text-accent-gold" />}
       </button>
 
-      <p className="text-center text-xs text-gray-400">
-        {aiSpeaking ? "Interviewer speaking…" : isRecording ? "Listening…" : "Tap to speak"}
+      <p className="text-center text-caption text-text-muted">
+        {aiSpeaking ? "Interviewer speaking\u2026" : isRecording ? "Listening\u2026" : "Tap to speak"}
       </p>
     </div>
   );

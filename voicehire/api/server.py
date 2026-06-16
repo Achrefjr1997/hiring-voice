@@ -21,12 +21,13 @@ from voicehire.agents.evidence_chain import EvidenceChain
 from voicehire.agents.integrity_skeptic import IntegritySkeptic
 from voicehire.agents.hiring_committee import HiringCommittee
 from voicehire.voice.stt import transcribe
-from voicehire.reports.report_generator import generate_report
+from voicehire.reports.report_generator import generate_report, generate_report_from_events
 from voicehire.reports.pdf_generator import generate_pdf
 from voicehire.db.database import init_db
 from voicehire.db.operations import (
     db_create_session, db_insert_event, db_end_session, ROOM_TO_SESSION,
     db_create_user, db_get_user_by_email, db_get_sessions_by_recruiter, db_get_session_history,
+    db_update_candidate_name,
 )
 from voicehire.api.auth import create_token, decode_token, hash_password, verify_password
 from voicehire.email.sender import send_invite_email
@@ -70,6 +71,9 @@ app.add_middleware(
 )
 
 AUDIO_DIR = os.path.join(os.path.dirname(__file__), "..", "audio_output")
+# Docker bind mount at /app/audio_output takes priority (persists across rebuilds)
+if os.path.isdir("/app/audio_output"):
+    AUDIO_DIR = "/app/audio_output"
 os.makedirs(AUDIO_DIR, exist_ok=True)
 app.mount("/audio", StaticFiles(directory=AUDIO_DIR), name="audio")
 
@@ -151,8 +155,11 @@ async def _process_audio_background(
         except Exception as e:
             print(f"[server] Failed to update history audio_url: {e}")
 
+    event_payload = {"text": transcript, "timestamp": time.time()}
+    if filename:
+        event_payload["audio_file"] = filename
     asyncio.create_task(db_insert_event(
-        session_id, "UTTERANCE", {"text": transcript, "timestamp": time.time()},
+        session_id, "UTTERANCE", event_payload,
     ))
 
     voice_token = os.environ["BAND_TOKEN_VOICE_PERSONA"]
@@ -164,16 +171,6 @@ async def _process_audio_background(
     except Exception as e:
         print(f"[server] Failed to post CANDIDATE_UTTERANCE event: {e}")
 
-    if brain_id:
-        try:
-            await _agent_post(voice_token, f"/agent/chats/{room}/messages", {
-                "message": {
-                    "content": f"@Session-brain UTTERANCE: {transcript}",
-                    "mentions": [{"id": brain_id}],
-                },
-            })
-        except Exception as e:
-            print(f"[server] Failed to post directed UTTERANCE message: {e}")
 
 
 @asynccontextmanager
@@ -267,12 +264,15 @@ async def get_session_history(id: str, recruiter_id: str = Depends(require_user)
     if mem_session:
         live_violations = mem_session.get("integrity_violations", [])
         history["session"]["violation_count"] = len(live_violations)
-        if not history["report"] and brain and brain.coverage_map:
-            report = generate_report(brain)
-            report["session_id"] = id
-            report["integrity_violations"] = live_violations
-            report["enforcement_config"] = mem_session.get("enforcement_config", {})
-            history["report"] = report
+        if not history["report"]:
+            report = await generate_report_from_events(id)
+            if not report and brain and brain.coverage_map:
+                report = generate_report(brain)
+                report["session_id"] = id
+                report["integrity_violations"] = live_violations
+                report["enforcement_config"] = mem_session.get("enforcement_config", {})
+            if report:
+                history["report"] = report
     else:
         history["session"]["violation_count"] = 0
     return history
@@ -338,18 +338,21 @@ async def create_session(
             "message": {"content": content, "mentions": [{"id": rubric_id}]},
         })
 
-    asyncio.create_task(db_create_session(
-        session_id, jd=jd, resume=resume, rubric=rubric,
-        enforcement_config={
-            "level": enforcement_level,
-            "threshold": violation_threshold,
-            "grace_period": grace_period,
-            "demo_mode": demo_mode,
-        },
-        demo_mode=demo_mode,
-        recruiter_id=recruiter_id,
-        candidate_email=candidate_email or None,
-    ))
+    try:
+        await db_create_session(
+            session_id, jd=jd, resume=resume, rubric=rubric,
+            enforcement_config={
+                "level": enforcement_level,
+                "threshold": violation_threshold,
+                "grace_period": grace_period,
+                "demo_mode": demo_mode,
+            },
+            demo_mode=demo_mode,
+            recruiter_id=recruiter_id,
+            candidate_email=candidate_email or None,
+        )
+    except Exception as e:
+        print(f"[server] CRITICAL: Failed to create session {session_id}: {e}")
 
     return {
         "session_id": session_id,
@@ -415,13 +418,17 @@ async def end_session(session_id: str):
             print(f"[server] Response body: {e.response.text[:500]}")
     SESSIONS[session_id]["status"] = "ENDED"
 
-    report_data = None
-    if brain and brain.coverage_map:
+    report_data = await generate_report_from_events(session_id)
+    if not report_data and brain and brain.coverage_map:
         report_data = generate_report(brain)
         report_data["session_id"] = session_id
+        report_data["status"] = "completed"
         report_data["integrity_violations"] = session.get("integrity_violations", [])
         report_data["enforcement_config"] = session.get("enforcement_config", {})
-    asyncio.create_task(db_end_session(session_id, report_data))
+    try:
+        await db_end_session(session_id, report_data)
+    except Exception as e:
+        print(f"[server] CRITICAL: Failed to end session {session_id}: {e}")
 
     return {"status": "ok"}
 
@@ -446,6 +453,11 @@ async def set_candidate_name(session_id: str, first_name: str = Form(...), last_
         raise HTTPException(404, "Session not found")
     full = f"{first_name} {last_name}"
     session["candidate_name"] = full
+    # Persist to DB (best-effort, must not block interview)
+    try:
+        await db_update_candidate_name(session_id, full)
+    except Exception as e:
+        print(f"[server] Failed to persist candidate_name to DB: {e}")
     band_session = session["band_session"]
     await _agent_post_event(
         os.environ["BAND_TOKEN_SESSION_BRAIN"],
@@ -610,13 +622,17 @@ async def _auto_end_session(session_id: str) -> None:
     except Exception as e:
         print(f"[server] auto-end failed: {e}")
     SESSIONS[session_id]["status"] = "ENDED"
-    report_data = None
-    if brain and brain.coverage_map:
+    report_data = await generate_report_from_events(session_id)
+    if not report_data and brain and brain.coverage_map:
         report_data = generate_report(brain)
         report_data["session_id"] = session_id
+        report_data["status"] = "completed"
         report_data["integrity_violations"] = session.get("integrity_violations", [])
         report_data["enforcement_config"] = session.get("enforcement_config", {})
-    asyncio.create_task(db_end_session(session_id, report_data))
+    try:
+        await db_end_session(session_id, report_data)
+    except Exception as e:
+        print(f"[server] CRITICAL: Failed to auto-end session {session_id}: {e}")
 
 
 async def _relay_to_session(session_id: str, content: str) -> None:
@@ -676,13 +692,17 @@ async def terminate_integrity(session_id: str):
     session["integrity_paused"] = False
     await _relay_to_session(session_id, "INTEGRITY_TERMINATED:")
 
-    report_data = None
-    if brain and brain.coverage_map:
+    report_data = await generate_report_from_events(session_id)
+    if not report_data and brain and brain.coverage_map:
         report_data = generate_report(brain)
         report_data["session_id"] = session_id
+        report_data["status"] = "completed"
         report_data["integrity_violations"] = session.get("integrity_violations", [])
         report_data["enforcement_config"] = session.get("enforcement_config", {})
-    asyncio.create_task(db_end_session(session_id, report_data))
+    try:
+        await db_end_session(session_id, report_data)
+    except Exception as e:
+        print(f"[server] CRITICAL: Failed to terminate session {session_id}: {e}")
 
     return {"ok": True}
 
@@ -720,3 +740,7 @@ async def ws_relay(ws: WebSocket, session_id: str):
                 band_session.exploration_room_id,
                 "CANDIDATE_DISCONNECTED:"
             )
+            # Auto-end if candidate disconnected without clicking finish
+            if session.get("status") != "CANDIDATE_FINISHED":
+                session["status"] = "CANDIDATE_FINISHED"
+                asyncio.create_task(_auto_end_session(session_id))

@@ -8,6 +8,7 @@ services:
     env_file:
       - .env
     volumes:
+      - ./db_data:/app/db_data
       - ./audio_output:/app/audio_output
 
   frontend:

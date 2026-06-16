@@ -135,6 +135,19 @@ async def db_get_session_history(session_id: str) -> dict | None:
         return None
 
 
+async def db_update_candidate_name(session_id: str, candidate_name: str) -> None:
+    try:
+        async with async_session() as session:
+            await session.execute(
+                update(SessionModel)
+                .where(SessionModel.id == session_id)
+                .values(candidate_name=candidate_name)
+            )
+            await session.commit()
+    except Exception as e:
+        print(f"[db] Failed to update candidate_name for session {session_id}: {e}")
+
+
 async def db_insert_event(
     session_id: str,
     event_type: str,

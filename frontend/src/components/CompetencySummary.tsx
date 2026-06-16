@@ -14,36 +14,36 @@ export default function CompetencySummary({
 
   return (
     <div className="max-w-2xl mx-auto p-8">
-      <h1 className="text-2xl font-bold text-gray-900 mb-2">Interview Overview</h1>
-      <p className="text-gray-600 mb-6">
+      <h1 className="text-heading font-bold text-text-primary font-serif mb-2">Interview Overview</h1>
+      <p className="text-body text-text-muted mb-6">
         This interview will assess the following competencies. Estimated duration:{" "}
-        <strong>{estimatedDuration}</strong>
+        <strong className="text-text-primary">{estimatedDuration}</strong>
       </p>
 
       <div className="flex gap-2 mb-6">
-        <span className="text-xs px-2 py-1 rounded bg-blue-100 text-blue-800 font-medium">
+        <span className="text-caption px-2 py-1 rounded-radius-card bg-accent-gold/10 text-accent-gold font-medium">
           {mustHaveCount} Required
         </span>
-        <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-600 font-medium">
+        <span className="text-caption px-2 py-1 rounded-radius-card bg-surface-raised text-text-muted font-medium">
           {niceToHaveCount} Good to explore
         </span>
       </div>
 
       <div className="space-y-3 mb-8">
         {competencies.map((comp, i) => (
-          <div key={i} className="border rounded-lg p-4 flex items-start gap-3">
-            <span className="text-xs font-mono text-gray-400 mt-0.5 shrink-0">{i + 1}.</span>
+          <div key={i} className="border border-border-default rounded-radius-card p-4 flex items-start gap-3 bg-surface-default">
+            <span className="text-caption font-mono text-text-muted mt-0.5 shrink-0">{i + 1}.</span>
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <h3 className="font-semibold text-gray-900">{comp.name}</h3>
-                  <p className="text-sm text-gray-500">{comp.domain}</p>
+                  <h3 className="font-semibold text-text-primary">{comp.name}</h3>
+                  <p className="text-body text-text-muted">{comp.domain}</p>
                 </div>
                 <span
-                  className={`shrink-0 text-xs px-2 py-0.5 rounded font-medium ${
+                  className={`shrink-0 text-caption px-2 py-0.5 rounded-radius-card font-medium ${
                     comp.classification === "MUST_HAVE"
-                      ? "bg-red-100 text-red-800"
-                      : "bg-gray-100 text-gray-600"
+                      ? "bg-accent-gold/10 text-accent-gold"
+                      : "bg-surface-raised text-text-muted"
                   }`}
                 >
                   {comp.classification === "MUST_HAVE" ? "Required" : "Nice to have"}
@@ -56,7 +56,7 @@ export default function CompetencySummary({
 
       <button
         onClick={onStart}
-        className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+        className="w-full bg-accent-gold text-text-on-accent py-3 rounded-radius-card font-semibold hover:brightness-110 transition-all"
       >
         Start Interview
       </button>

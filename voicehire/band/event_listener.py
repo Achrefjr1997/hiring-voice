@@ -10,7 +10,7 @@ def _log(msg: str) -> None:
 
 EVENT_ROUTES = {
     "COMPETENCY_GRAPH_READY": "session-brain",
-    "CANDIDATE_UTTERANCE": None,
+    "CANDIDATE_UTTERANCE": "session-brain",
     "CANDIDATE_IDENTIFIED": "session-brain",
     "CANDIDATE_FINISHED": "session-brain",
     "CANDIDATE_CONNECTED": "session-brain",

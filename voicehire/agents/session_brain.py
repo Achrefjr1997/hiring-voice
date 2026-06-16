@@ -57,12 +57,7 @@ class SessionBrain(BandAgent):
             await self._on_utterance(room_id, transcript)
         elif "CANDIDATE_UTTERANCE:" in content:
             transcript = content.replace("CANDIDATE_UTTERANCE:", "").strip()
-            self.conversation_history.append({
-                "type": "response",
-                "timestamp": time.time(),
-                "text": transcript,
-                "audio_url": None,
-            })
+            await self._on_utterance(room_id, transcript)
         elif "EVIDENCE:" in content or "EVIDENCE_POSTED:" in content:
             await self._on_evidence(room_id, content)
         elif "CHALLENGE:" in content:

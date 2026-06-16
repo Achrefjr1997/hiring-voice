@@ -13,6 +13,11 @@ export default function CandidateRoom() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const { state, connect, sendAudio } = useBandSession();
   const [stage, setStage] = useState<Stage>("validating");
+
+  useEffect(() => {
+    document.body.classList.add("candidate-mode");
+    return () => document.body.classList.remove("candidate-mode");
+  }, []);
   const [error, setError] = useState<string | null>(null);
   const [competencySummary, setCompetencySummary] = useState<CompetencySummaryType | null>(null);
   const [finishing, setFinishing] = useState(false);
@@ -58,7 +63,6 @@ export default function CandidateRoom() {
       body: new URLSearchParams({ first_name: first, last_name: last }),
     });
 
-    // Fetch competency summary with polling (up to 60s)
     let summary: CompetencySummaryType | null = null;
     let pollAttempts = 0;
     while (!summary && pollAttempts < 30) {
@@ -70,7 +74,7 @@ export default function CandidateRoom() {
           break;
         }
       } catch {
-        // Network error, retry
+        // retry
       }
       await new Promise((r) => setTimeout(r, 2000));
     }
@@ -110,10 +114,10 @@ export default function CandidateRoom() {
 
   if (stage === "invalid") {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-50">
-        <div className="max-w-md p-8 bg-white rounded-xl border border-red-200 shadow-sm">
-          <h1 className="text-lg font-semibold text-red-700 mb-2">Cannot join interview</h1>
-          <p className="text-sm text-gray-600">{error}</p>
+      <div className="flex items-center justify-center h-screen">
+        <div className="max-w-md p-8 bg-surface-default rounded-radius-card border border-status-alert/30 shadow-sm">
+          <h1 className="text-heading font-semibold text-status-alert font-serif mb-2">Cannot join interview</h1>
+          <p className="text-body text-text-muted">{error}</p>
         </div>
       </div>
     );
@@ -121,23 +125,25 @@ export default function CandidateRoom() {
 
   if (stage === "validating") {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-50">
-        <p className="text-sm text-gray-400">Verifying link…</p>
+      <div className="flex items-center justify-center h-screen">
+        <p className="text-body text-text-muted italic">Verifying link\u2026</p>
       </div>
     );
   }
 
   if (stage === "name-form") {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-50">
-        <CandidateNameForm onSubmit={handleNameSubmit} />
+      <div className="flex items-center justify-center h-screen">
+        <div className="bg-surface-default rounded-radius-card border border-border-default shadow-sm p-8 max-w-md w-full mx-4">
+          <CandidateNameForm onSubmit={handleNameSubmit} />
+        </div>
       </div>
     );
   }
 
   if (stage === "summary" && competencySummary) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+      <div className="flex items-center justify-center min-h-screen">
         <CompetencySummary
           competencies={competencySummary.competencies}
           estimatedDuration={competencySummary.estimated_duration}
@@ -149,23 +155,28 @@ export default function CandidateRoom() {
 
   if (stage === "finished") {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-50">
-        <div className="max-w-md p-8 bg-white rounded-xl border border-green-200 shadow-sm text-center">
-          <h1 className="text-lg font-semibold text-green-700 mb-2">Interview Complete</h1>
-          <p className="text-sm text-gray-600">Thank you for your time. We will review your interview and contact you regarding next steps.</p>
-          <p className="text-xs text-gray-400 mt-4">You may now close this tab.</p>
+      <div className="flex items-center justify-center h-screen">
+        <div className="max-w-md p-8 bg-surface-default rounded-radius-card border border-accent-gold/20 shadow-sm text-center">
+          <div className="w-16 h-16 rounded-full bg-accent-gold/10 flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-accent-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <h1 className="text-heading font-semibold text-text-primary font-serif mb-2">Interview Complete</h1>
+          <p className="text-body text-text-muted">Thank you for your time. We will review your interview and contact you regarding next steps.</p>
+          <p className="text-caption text-text-muted mt-6">You may now close this tab.</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col items-center justify-center h-screen bg-gray-50 p-4 relative">
+    <div className="flex flex-col items-center justify-center h-screen p-4 relative">
       {state.integrityPaused && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
-          <div className="bg-white rounded-xl shadow-xl max-w-md p-8 text-center">
-            <h2 className="text-lg font-semibold text-red-700 mb-2">Interview Paused</h2>
-            <p className="text-sm text-gray-600">Please wait for the recruiter to resume the session.</p>
+          <div className="bg-surface-default rounded-radius-card shadow-xl max-w-md p-8 text-center border border-border-default">
+            <h2 className="text-heading font-semibold text-text-primary font-serif mb-2">Interview Paused</h2>
+            <p className="text-body text-text-muted">Please wait for the recruiter to resume the session.</p>
           </div>
         </div>
       )}
@@ -174,7 +185,7 @@ export default function CandidateRoom() {
         <button
           onClick={handleFinish}
           disabled={finishing}
-          className="px-4 py-2 text-sm font-medium rounded-lg border border-red-200 text-red-600 bg-white hover:bg-red-50 disabled:opacity-50"
+          className="px-4 py-2 text-body font-medium rounded-radius-card border border-accent-gold/30 text-accent-gold bg-surface-default hover:bg-accent-gold/10 disabled:opacity-50 transition-colors"
         >
           {finishing ? "Ending Interview..." : "Finish Interview"}
         </button>

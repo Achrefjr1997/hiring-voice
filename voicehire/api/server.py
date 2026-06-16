@@ -264,17 +264,20 @@ async def get_session_history(id: str, recruiter_id: str = Depends(require_user)
     if mem_session:
         live_violations = mem_session.get("integrity_violations", [])
         history["session"]["violation_count"] = len(live_violations)
-        if not history["report"]:
-            report = await generate_report_from_events(id)
-            if not report and brain and brain.coverage_map:
-                report = generate_report(brain)
-                report["session_id"] = id
-                report["integrity_violations"] = live_violations
-                report["enforcement_config"] = mem_session.get("enforcement_config", {})
-            if report:
-                history["report"] = report
+        brain_fallback = brain and brain.coverage_map
     else:
         history["session"]["violation_count"] = 0
+        brain_fallback = False
+
+    if not history["report"]:
+        report = await generate_report_from_events(id)
+        if not report and brain_fallback:
+            report = generate_report(brain)
+            report["session_id"] = id
+            report["integrity_violations"] = live_violations if mem_session else []
+            report["enforcement_config"] = mem_session.get("enforcement_config", {}) if mem_session else {}
+        if report:
+            history["report"] = report
     return history
 
 

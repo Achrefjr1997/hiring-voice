@@ -41,7 +41,7 @@ async def generate_report_from_events(session_id: str) -> dict | None:
         for e in conv:
             ts = e.get("timestamp")
             entry = {
-                "role": "probe" if e["event_type"] == "PROBE" else "response",
+                "type": "probe" if e["event_type"] == "PROBE" else "response",
                 "text": e["payload"].get("probeText", e["payload"].get("text", "")),
                 "timestamp": ts,
             }

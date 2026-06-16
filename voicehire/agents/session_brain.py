@@ -1,9 +1,11 @@
 ﻿import json
 import time
 import uuid
+import asyncio
 from voicehire.band.agent_base import BandAgent
 from voicehire.api.client import AIMLAPIClient, MODELS
 from voicehire.competency.coverage_map import CoverageMap
+from voicehire.db.operations import ROOM_TO_SESSION, db_insert_event
 
 PROBE_SYSTEM_PROMPT = """You are a senior staff engineer conducting a technical interview.
 You are NOT selecting from a list of questions.
@@ -39,6 +41,7 @@ class SessionBrain(BandAgent):
         self.max_questions_per_competency: int = 3
         self.candidate_ready = False
         self.first_probe_generated = False
+        self.session_id: str | None = None
 
     def set_duration(self, minutes: int) -> None:
         self.max_duration_seconds = minutes * 60
@@ -124,6 +127,9 @@ class SessionBrain(BandAgent):
         if self.committee_room_id:
             await self.send_to_agent(self.committee_room_id, "Hiring Committee",
                                       self.committee_id, f"EVIDENCE: {json.dumps(evidence_node)}")
+        session_id = ROOM_TO_SESSION.get(room_id) or self.session_id
+        if session_id:
+            asyncio.create_task(db_insert_event(session_id, "EVIDENCE", evidence_node))
         await self._generate_next_probe(room_id)
 
     async def _on_integrity_challenge(self, room_id: str, content: str) -> None:
@@ -211,7 +217,9 @@ class SessionBrain(BandAgent):
         if not target:
             print("[session-brain] INTERVIEW_COMPLETE: all targets exhausted or limits reached.")
             await self.send_event(room_id, "INTERVIEW_COMPLETE: All targets resolved or limits reached.")
+            await asyncio.sleep(5)
             await self._on_session_end(room_id)
+            await self.send_event(room_id, "SESSION_END: complete")
             return
 
         # 4. Increment probe count and proceed with generation
@@ -220,9 +228,7 @@ class SessionBrain(BandAgent):
         elapsed = time.time() - self.competency_start_times.get(target.competency_id, time.time())
         print(f"[session-brain] Probe #{self.probe_counts[target.competency_id]} for '{target.name}' (time: {elapsed:.0f}s / {self.max_competency_duration}s)")
 
-        candidate_tag = f"CANDIDATE: {self.candidate_name}\n" if self.candidate_name else ""
         probe_context = (
-            f"{candidate_tag}"
             f"TARGET: {target.name} DOMAIN: {target.domain}\n"
             f"DEPTH: {target.depth_required} COVERAGE: {target.confidence:.0%}\n"
             f"HISTORY: {json.dumps(self.conversation_history[-5:])}"
@@ -254,4 +260,7 @@ class SessionBrain(BandAgent):
             "text": probe["probeText"],
             "audio_url": None,
         })
+        session_id = ROOM_TO_SESSION.get(room_id) or self.session_id
+        if session_id:
+            asyncio.create_task(db_insert_event(session_id, "PROBE", probe))
         print(f"[session-brain] Probe #{self.probe_counts[target.competency_id]} for '{target.name}': {probe['probeText'][:80]}...")

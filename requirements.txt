@@ -8,5 +8,13 @@ instructor
 httpx
 python-dotenv
 fastapi
+python-multipart
 websockets
 uvicorn
+sqlalchemy[asyncio]
+aiosqlite
+aiosmtplib
+fpdf2
+bcrypt==4.0.1
+passlib[bcrypt]
+python-jose[cryptography]

@@ -123,6 +123,7 @@ function parseBandMessage(topic: string, payload: any): ParsedVoiceHireEvent {
     ["CANDIDATE_CONNECTED", "CANDIDATE_CONNECTED:"],
     ["CANDIDATE_FINISHED", "CANDIDATE_FINISHED"],
     ["CANDIDATE_DISCONNECTED", "CANDIDATE_DISCONNECTED"],
+    ["SESSION_END", "SESSION_END:"],
     ["INTEGRITY_VIOLATION", "INTEGRITY_VIOLATION:"],
     ["INTEGRITY_PAUSED", "INTEGRITY_PAUSED:"],
     ["INTEGRITY_RESUMED", "INTEGRITY_RESUMED:"],
@@ -195,6 +196,8 @@ function handleParsedEvent(
         return { ...next, integrityPaused: false };
       case "INTEGRITY_TERMINATED":
         return { ...next, integrityPaused: false, status: "ended" as const };
+      case "SESSION_END":
+        return { ...next, status: "ended" as const };
       default:
         return next;
     }

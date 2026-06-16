@@ -54,6 +54,7 @@ interface ReportViewProps {
   decision: HiringDecision | null;
   deliberationFullText: { advocate: string; critic: string } | null;
   onClose: () => void;
+  initialReport?: ReportData | null;
 }
 
 function statusColor(status: string): string {
@@ -71,16 +72,17 @@ function classificationBadge(cls: string): { label: string; style: string } {
   return { label: "Nice-to-have", style: "bg-purple-100 text-purple-700" };
 }
 
-export default function ReportView({ sessionId, decision, deliberationFullText, onClose }: ReportViewProps) {
-  const [report, setReport] = useState<ReportData | null>(null);
-  const [loading, setLoading] = useState(true);
+export default function ReportView({ sessionId, decision, deliberationFullText, onClose, initialReport }: ReportViewProps) {
+  const [report, setReport] = useState<ReportData | null>(initialReport ?? null);
+  const [loading, setLoading] = useState(!initialReport);
 
   useEffect(() => {
+    if (initialReport) return;
     fetch(`/session/${sessionId}/report`)
       .then((r) => r.json())
       .then((data) => { setReport(data); setLoading(false); })
       .catch(() => setLoading(false));
-  }, [sessionId]);
+  }, [sessionId, initialReport]);
 
   if (loading) {
     return (

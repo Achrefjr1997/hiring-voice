@@ -19,3 +19,9 @@ DEEPGRAM_TTS_URL = "https://api.deepgram.com/v1/speak"
 TTS_FILLER_MODEL = "aura-2-thalia-en"
 TTS_PROBE_MODEL = "aura-2-apollo-en"
 TTS_FORMAT = "mp3"
+
+SMTP_HOST = os.environ.get("SMTP_HOST", "")
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
+SMTP_USER = os.environ.get("SMTP_USER", "")
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
+EMAIL_FROM = os.environ.get("EMAIL_FROM", "noreply@voicehire.ai")

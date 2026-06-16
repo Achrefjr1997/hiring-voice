@@ -1,42 +1,106 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { useBandSession } from "../hooks/useBandSession";
+import { useAuth } from "./AuthProvider";
 import SessionSetup from "./SessionSetup";
 import SessionInfo from "./SessionInfo";
+import SessionHistoryList from "./SessionHistoryList";
 import BandEventLog from "./BandEventLog";
 import CoverageMapViz from "./CoverageMapViz";
 import EvidencePortfolio from "./EvidencePortfolio";
 
+type ViewMode = "history" | "setup" | "live";
+
 export default function RecruiterDashboard() {
   const { state, connect } = useBandSession();
+  const { token } = useAuth();
+  const navigate = useNavigate();
+  const [view, setView] = useState<ViewMode>("history");
   const [loading, setLoading] = useState(false);
   const [sessionLink, setSessionLink] = useState<string | null>(null);
   const [showViolationDetails, setShowViolationDetails] = useState(false);
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [candidateEmail, setCandidateEmail] = useState<string | null>(null);
 
-  const handleSessionCreate = async (jd: string, resume: string, rubric: string, duration: string, enforcementLevel: string, violationThreshold: number, gracePeriod: number, demoMode: boolean) => {
+  useEffect(() => {
+    if (!token) return;
+    fetch("/sessions", { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then(setSessions)
+      .catch(() => {});
+  }, [token]);
+
+  const handleSessionCreate = async (jd: string, resume: string, rubric: string, duration: string, enforcementLevel: string, violationThreshold: number, gracePeriod: number, demoMode: boolean, ce?: string) => {
     setLoading(true);
     try {
+      const headers: Record<string, string> = { "Content-Type": "application/x-www-form-urlencoded" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const body = new URLSearchParams({
+        jd, resume, rubric, role_level: "senior", duration_minutes: duration,
+        enforcement_level: enforcementLevel,
+        violation_threshold: String(violationThreshold),
+        grace_period: String(gracePeriod),
+        demo_mode: demoMode ? "true" : "false",
+      });
+      if (ce) body.set("candidate_email", ce);
       const res = await fetch("/session/create", {
         method: "POST",
-        body: new URLSearchParams({
-          jd, resume, rubric, role_level: "senior", duration_minutes: duration,
-          enforcement_level: enforcementLevel,
-          violation_threshold: String(violationThreshold),
-          grace_period: String(gracePeriod),
-          demo_mode: demoMode ? "true" : "false",
-        }),
+        headers,
+        body,
       });
+      if (res.status === 401) { navigate("/login"); return; }
       const data = await res.json();
       connect(data.session_id);
       setSessionLink(`${window.location.origin}/interview/${data.session_id}`);
+      setCandidateEmail(ce || null);
+      setView("live");
     } finally {
       setLoading(false);
     }
   };
 
-  if (state.status === "idle") {
-    return <SessionSetup onSubmit={handleSessionCreate} loading={loading} />;
+  const handleSendInvite = async () => {
+    if (!state.sessionId) return;
+    const res = await fetch(`/session/${state.sessionId}/send-invite`, { method: "POST" });
+    if (!res.ok) throw new Error("Failed to send invite");
+  };
+
+  // History view
+  if (view === "history") {
+    return (
+      <div className="flex flex-col p-4 max-w-3xl mx-auto min-h-screen">
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-xl font-semibold text-gray-800">VoiceHire</h1>
+          <button
+            onClick={() => { localStorage.removeItem("auth_token"); localStorage.removeItem("auth_recruiter_id"); localStorage.removeItem("auth_email"); navigate("/login"); }}
+            className="text-xs text-gray-500 hover:text-gray-700"
+          >
+            Sign Out
+          </button>
+        </div>
+        <SessionHistoryList
+          sessions={sessions}
+          onCreateNew={() => setView("setup")}
+        />
+      </div>
+    );
   }
 
+  // Setup view
+  if (view === "setup") {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-2xl mx-auto p-4">
+          <button onClick={() => setView("history")} className="mb-4 text-sm text-blue-600 hover:text-blue-800">
+            ← Back to History
+          </button>
+        </div>
+        <SessionSetup onSubmit={handleSessionCreate} loading={loading} />
+      </div>
+    );
+  }
+
+  // Live view (unchanged behavior)
   const handleIntegrityResume = async () => {
     if (!state.sessionId) return;
     await fetch(`/session/${state.sessionId}/integrity-resume`, { method: "POST" });
@@ -70,7 +134,7 @@ export default function RecruiterDashboard() {
           </div>
           {showViolationDetails && (
             <div className="mt-3 space-y-1 max-h-64 overflow-y-auto">
-              {[...state.integrityViolations].reverse().map((v, i) => (
+              {[...state.integrityViolations].reverse().map((v: any, i: number) => (
                 <div key={i} className="flex items-center gap-3 text-xs border-b border-red-100 pb-1 last:border-0">
                   <span className="text-gray-500 w-20 shrink-0">{new Date(v.timestamp).toLocaleTimeString()}</span>
                   <span className="text-gray-700 flex-1">{v.type.replace(/_/g, " ")}</span>
@@ -115,6 +179,9 @@ export default function RecruiterDashboard() {
           candidateName={state.candidateName}
           candidateStatus={state.candidateStatus}
           isSessionReady={state.isSessionReady}
+          candidateEmail={candidateEmail}
+          onSendInvite={handleSendInvite}
+          sessionId={state.sessionId || undefined}
         />
       <BandEventLog events={state.events} connected={state.connected} />
       <CoverageMapViz coverageMap={state.coverageMap} />

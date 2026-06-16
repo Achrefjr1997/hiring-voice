@@ -15,7 +15,14 @@ export default function CandidateRoom() {
   const [stage, setStage] = useState<Stage>("validating");
   const [error, setError] = useState<string | null>(null);
   const [competencySummary, setCompetencySummary] = useState<CompetencySummaryType | null>(null);
+  const [finishing, setFinishing] = useState(false);
   useIntegrityCheck(sessionId ?? null, stage === "interview");
+
+  useEffect(() => {
+    if (state.status === "ended" && stage === "interview") {
+      setStage("finished");
+    }
+  }, [state.status, stage]);
 
   useEffect(() => {
     if (!sessionId) {
@@ -24,12 +31,18 @@ export default function CandidateRoom() {
       return;
     }
     fetch(`/session/${sessionId}`)
-      .then((r) => {
+      .then(async (r) => {
         if (r.status === 404) {
           setError("Invalid or expired interview link");
           setStage("invalid");
         } else {
-          setStage("name-form");
+          const data = await r.json();
+          if (data.status === "ENDED" || data.status === "completed" || data.status === "CANDIDATE_FINISHED") {
+            setError("This interview has already been completed.");
+            setStage("invalid");
+          } else {
+            setStage("name-form");
+          }
         }
       })
       .catch(() => {
@@ -84,6 +97,17 @@ export default function CandidateRoom() {
     setStage("interview");
   };
 
+  const handleFinish = async () => {
+    if (!sessionId || finishing) return;
+    setFinishing(true);
+    try {
+      await fetch(`/session/${sessionId}/finish`, { method: "POST" });
+    } catch {
+      // Server will auto-end regardless
+    }
+    setStage("finished");
+  };
+
   if (stage === "invalid") {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-50">
@@ -127,8 +151,9 @@ export default function CandidateRoom() {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-50">
         <div className="max-w-md p-8 bg-white rounded-xl border border-green-200 shadow-sm text-center">
-          <h1 className="text-lg font-semibold text-green-700 mb-2">Thank you!</h1>
-          <p className="text-sm text-gray-600">Recruiter notified. You may close this tab.</p>
+          <h1 className="text-lg font-semibold text-green-700 mb-2">Interview Complete</h1>
+          <p className="text-sm text-gray-600">Thank you for your time. We will review your interview and contact you regarding next steps.</p>
+          <p className="text-xs text-gray-400 mt-4">You may now close this tab.</p>
         </div>
       </div>
     );
@@ -144,6 +169,16 @@ export default function CandidateRoom() {
           </div>
         </div>
       )}
+
+      <div className="absolute top-4 right-4 z-10">
+        <button
+          onClick={handleFinish}
+          disabled={finishing}
+          className="px-4 py-2 text-sm font-medium rounded-lg border border-red-200 text-red-600 bg-white hover:bg-red-50 disabled:opacity-50"
+        >
+          {finishing ? "Ending Interview..." : "Finish Interview"}
+        </button>
+      </div>
 
       <VoiceInterface
         events={state.events}

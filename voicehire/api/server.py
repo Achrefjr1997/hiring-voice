@@ -1,4 +1,5 @@
 import os
+import sys
 import uuid
 import random
 import json
@@ -6,9 +7,10 @@ import asyncio
 import time
 from datetime import datetime
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Form, UploadFile, File, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Form, UploadFile, File, HTTPException, WebSocket, WebSocketDisconnect, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import httpx
 from voicehire.band.session_factory import BandSessionFactory
 from voicehire.band.event_listener import BandEventListener, AgentRegistry
@@ -20,13 +22,49 @@ from voicehire.agents.integrity_skeptic import IntegritySkeptic
 from voicehire.agents.hiring_committee import HiringCommittee
 from voicehire.voice.stt import transcribe
 from voicehire.reports.report_generator import generate_report
+from voicehire.reports.pdf_generator import generate_pdf
+from voicehire.db.database import init_db
+from voicehire.db.operations import (
+    db_create_session, db_insert_event, db_end_session, ROOM_TO_SESSION,
+    db_create_user, db_get_user_by_email, db_get_sessions_by_recruiter, db_get_session_history,
+)
+from voicehire.api.auth import create_token, decode_token, hash_password, verify_password
+from voicehire.email.sender import send_invite_email
 from config import BAND_API_BASE, BAND_API_KEY, TTS_FORMAT
+
+security = HTTPBearer(auto_error=False)
+
+REQUIRED_ENV_VARS = [
+    "AIMLAPI_KEY",
+    "FEATHERLESS_KEY",
+    "BRANDAPIKEY",
+    "DEEPGRAM_KEY",
+    "JWT_SECRET",
+]
+
+
+def validate_env() -> None:
+    missing = [v for v in REQUIRED_ENV_VARS if not os.environ.get(v)]
+    if missing:
+        msg = f"Missing required environment variables: {', '.join(missing)}"
+        print(f"[env] FATAL: {msg}", flush=True)
+        sys.exit(1)
+    print("[env] All required environment variables present.", flush=True)
+
+
+async def require_user(credentials: HTTPAuthorizationCredentials | None = Depends(security)):
+    if not credentials:
+        raise HTTPException(401, "Authentication required")
+    payload = decode_token(credentials.credentials)
+    if not payload:
+        raise HTTPException(401, "Invalid or expired token")
+    return payload["sub"]
 
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["http://localhost:5173", "http://localhost:80"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -89,6 +127,7 @@ async def _agent_post_event(agent_token: str, room_id: str, content: str) -> dic
 
 async def _process_audio_background(
     audio_bytes: bytes,
+    session_id: str,
     exploration_room_id: str,
     brain_id: str | None,
     filename: str | None = None,
@@ -111,6 +150,10 @@ async def _process_audio_background(
                         break
         except Exception as e:
             print(f"[server] Failed to update history audio_url: {e}")
+
+    asyncio.create_task(db_insert_event(
+        session_id, "UTTERANCE", {"text": transcript, "timestamp": time.time()},
+    ))
 
     voice_token = os.environ["BAND_TOKEN_VOICE_PERSONA"]
     room = exploration_room_id
@@ -135,6 +178,7 @@ async def _process_audio_background(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    validate_env()
     global brain
     voice_id = factory.get_agent_id("Voice Persona")
     chain_id = factory.get_agent_id("Evidence Chain")
@@ -167,6 +211,9 @@ async def lifespan(app: FastAPI):
     print("[server] Pre-generating filler TTS…")
     await voice.prefetch_fillers()
 
+    await init_db()
+    print("[server] Database initialized.")
+
     yield
 
     await listener.stop()
@@ -175,8 +222,65 @@ async def lifespan(app: FastAPI):
 app.router.lifespan_context = lifespan
 
 
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+
+@app.post("/auth/register")
+async def register(email: str = Form(...), password: str = Form(...)):
+    if not email or not password:
+        raise HTTPException(400, "Email and password required")
+    existing = await db_get_user_by_email(email)
+    if existing:
+        raise HTTPException(409, "Email already registered")
+    hashed = hash_password(password)
+    user_id = await db_create_user(email, hashed)
+    token = create_token(user_id, email)
+    return {"token": token, "recruiter_id": user_id, "email": email}
+
+
+@app.post("/auth/login")
+async def login(email: str = Form(...), password: str = Form(...)):
+    if not email or not password:
+        raise HTTPException(400, "Email and password required")
+    user = await db_get_user_by_email(email)
+    if not user or not verify_password(password, user.hashed_password):
+        raise HTTPException(401, "Invalid email or password")
+    token = create_token(user.id, user.email)
+    return {"token": token, "recruiter_id": user.id, "email": user.email}
+
+
+@app.get("/sessions")
+async def list_sessions(recruiter_id: str = Depends(require_user)):
+    sessions = await db_get_sessions_by_recruiter(recruiter_id)
+    return sessions
+
+
+@app.get("/session/{id}/history")
+async def get_session_history(id: str, recruiter_id: str = Depends(require_user)):
+    history = await db_get_session_history(id)
+    if not history:
+        raise HTTPException(404, "Session not found")
+    # Attach live violation count from in-memory if session is active
+    mem_session = SESSIONS.get(id)
+    if mem_session:
+        live_violations = mem_session.get("integrity_violations", [])
+        history["session"]["violation_count"] = len(live_violations)
+        if not history["report"] and brain and brain.coverage_map:
+            report = generate_report(brain)
+            report["session_id"] = id
+            report["integrity_violations"] = live_violations
+            report["enforcement_config"] = mem_session.get("enforcement_config", {})
+            history["report"] = report
+    else:
+        history["session"]["violation_count"] = 0
+    return history
+
+
 @app.post("/session/create")
 async def create_session(
+    recruiter_id: str = Depends(require_user),
     jd: str = Form(...),
     resume: str = Form(...),
     rubric: str = Form(default=""),
@@ -186,6 +290,7 @@ async def create_session(
     violation_threshold: int = Form(default=3),
     grace_period: int = Form(default=1),
     demo_mode: bool = Form(default=True),
+    candidate_email: str = Form(default=""),
 ):
     session_id = uuid.uuid4().hex[:8]
     band_session = await asyncio.to_thread(factory.create_session, session_id)
@@ -201,6 +306,7 @@ async def create_session(
         },
         "integrity_violations": [],
         "integrity_paused": False,
+        "candidate_email": candidate_email or None,
     }
 
     await listener.subscribe_to_rooms([
@@ -212,11 +318,15 @@ async def create_session(
     room_to_session[band_session.foundation_room_id] = session_id
     room_to_session[band_session.exploration_room_id] = session_id
     room_to_session[band_session.committee_room_id] = session_id
+    ROOM_TO_SESSION[band_session.foundation_room_id] = session_id
+    ROOM_TO_SESSION[band_session.exploration_room_id] = session_id
+    ROOM_TO_SESSION[band_session.committee_room_id] = session_id
 
     if brain:
         brain.foundation_room_id = band_session.foundation_room_id
         brain.exploration_room_id = band_session.exploration_room_id
         brain.committee_room_id = band_session.committee_room_id
+        brain.session_id = session_id
         brain.set_duration(duration_minutes)
 
     brain_token = os.environ["BAND_TOKEN_SESSION_BRAIN"]
@@ -227,6 +337,19 @@ async def create_session(
         await _agent_post(brain_token, f"/agent/chats/{band_session.foundation_room_id}/messages", {
             "message": {"content": content, "mentions": [{"id": rubric_id}]},
         })
+
+    asyncio.create_task(db_create_session(
+        session_id, jd=jd, resume=resume, rubric=rubric,
+        enforcement_config={
+            "level": enforcement_level,
+            "threshold": violation_threshold,
+            "grace_period": grace_period,
+            "demo_mode": demo_mode,
+        },
+        demo_mode=demo_mode,
+        recruiter_id=recruiter_id,
+        candidate_email=candidate_email or None,
+    ))
 
     return {
         "session_id": session_id,
@@ -270,7 +393,7 @@ async def submit_audio(session_id: str, audio: UploadFile = File(...)):
 
     brain_id = factory.get_agent_id("Session Brain")
     asyncio.create_task(_process_audio_background(
-        blob, band_session.exploration_room_id, brain_id, filename, mime,
+        blob, session_id, band_session.exploration_room_id, brain_id, filename, mime,
     ))
 
     return {"filler_url": filler_url}
@@ -291,6 +414,15 @@ async def end_session(session_id: str):
         if hasattr(e, 'response') and e.response is not None:
             print(f"[server] Response body: {e.response.text[:500]}")
     SESSIONS[session_id]["status"] = "ENDED"
+
+    report_data = None
+    if brain and brain.coverage_map:
+        report_data = generate_report(brain)
+        report_data["session_id"] = session_id
+        report_data["integrity_violations"] = session.get("integrity_violations", [])
+        report_data["enforcement_config"] = session.get("enforcement_config", {})
+    asyncio.create_task(db_end_session(session_id, report_data))
+
     return {"status": "ok"}
 
 
@@ -321,6 +453,22 @@ async def set_candidate_name(session_id: str, first_name: str = Form(...), last_
         f"CANDIDATE_IDENTIFIED: {json.dumps({'first_name': first_name, 'last_name': last_name})}"
     )
     return {"ok": True, "candidate_name": full}
+
+
+@app.post("/session/{session_id}/send-invite")
+async def send_invite(session_id: str):
+    session = SESSIONS.get(session_id)
+    if not session:
+        raise HTTPException(404, "Session not found")
+    candidate_email = session.get("candidate_email")
+    candidate_name = session.get("candidate_name", "Candidate")
+    if not candidate_email:
+        raise HTTPException(400, "No candidate email set for this session")
+    link = f"{os.environ.get('FRONTEND_URL', 'http://localhost:5173')}/interview/{session_id}"
+    sent = await send_invite_email(candidate_email, candidate_name, link)
+    if not sent:
+        raise HTTPException(502, "Failed to send email")
+    return {"ok": True, "sent": True}
 
 
 @app.get("/session/{session_id}/competencies")
@@ -358,6 +506,80 @@ async def get_report(session_id: str):
     return report
 
 
+@app.get("/session/{session_id}/pdf")
+async def get_pdf(session_id: str):
+    global brain
+    session = SESSIONS.get(session_id)
+    report = None
+    decision = None
+    deliberation_text = None
+    history = None
+
+    # Try in-memory first (live session)
+    if session:
+        report = generate_report(brain) if brain and brain.coverage_map else None
+        try:
+            history = await db_get_session_history(session_id)
+        except Exception:
+            pass
+    else:
+        # Fallback to DB-only (historical session)
+        try:
+            history = await db_get_session_history(session_id)
+        except Exception:
+            pass
+        if not history:
+            raise HTTPException(404, "Session not found")
+        enf = history["session"].get("enforcement_config") or {}
+        violations = [
+            {
+                "type": e["payload"].get("type", e["event_type"]),
+                "timestamp": e["payload"].get("timestamp", e["timestamp"]),
+                "severity": e["payload"].get("severity", "info"),
+                "points": e["payload"].get("points", 0),
+            }
+            for e in history.get("events", [])
+            if e["event_type"] == "INTEGRITY_VIOLATION"
+        ]
+        session = {
+            "status": history["session"].get("status", "N/A"),
+            "candidate_name": history["session"].get("candidate_name"),
+            "candidate_email": history["session"].get("candidate_email"),
+            "enforcement_config": enf,
+            "integrity_violations": violations,
+        }
+        report = history.get("report")
+
+    # Extract decision / deliberation from DB events
+    if history:
+        try:
+            for ev in history.get("events", []):
+                if ev["event_type"] == "DELIBERATION":
+                    payload = ev["payload"]
+                    if isinstance(payload, dict):
+                        decision = payload
+                        dt = payload.get("deliberation_transcript", {})
+                        if dt:
+                            deliberation_text = dt
+                        break
+        except Exception as e:
+            print(f"[pdf] Failed to load deliberation from DB: {e}")
+
+    pdf_bytes = generate_pdf(
+        session_id=session_id,
+        session_info=session,
+        report=report,
+        decision=decision,
+        deliberation_text=deliberation_text,
+    )
+    from fastapi.responses import Response
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="voicehire-report-{session_id}.pdf"'},
+    )
+
+
 @app.post("/session/{session_id}/finish")
 async def candidate_finish(session_id: str):
     session = SESSIONS.get(session_id)
@@ -370,7 +592,31 @@ async def candidate_finish(session_id: str):
         "CANDIDATE_FINISHED:"
     )
     session["status"] = "CANDIDATE_FINISHED"
+
+    asyncio.create_task(_auto_end_session(session_id))
+
     return {"ok": True}
+
+
+async def _auto_end_session(session_id: str) -> None:
+    await asyncio.sleep(5)
+    session = SESSIONS.get(session_id)
+    if not session or session.get("status") != "CANDIDATE_FINISHED":
+        return
+    band_session = session["band_session"]
+    brain_token = os.environ["BAND_TOKEN_SESSION_BRAIN"]
+    try:
+        await _agent_post_event(brain_token, band_session.exploration_room_id, "SESSION_END")
+    except Exception as e:
+        print(f"[server] auto-end failed: {e}")
+    SESSIONS[session_id]["status"] = "ENDED"
+    report_data = None
+    if brain and brain.coverage_map:
+        report_data = generate_report(brain)
+        report_data["session_id"] = session_id
+        report_data["integrity_violations"] = session.get("integrity_violations", [])
+        report_data["enforcement_config"] = session.get("enforcement_config", {})
+    asyncio.create_task(db_end_session(session_id, report_data))
 
 
 async def _relay_to_session(session_id: str, content: str) -> None:
@@ -397,6 +643,7 @@ async def report_integrity_violation(session_id: str, violation: dict):
     if "integrity_violations" not in session:
         session["integrity_violations"] = []
     session["integrity_violations"].append(violation)
+    asyncio.create_task(db_insert_event(session_id, "INTEGRITY_VIOLATION", violation))
     await _relay_to_session(session_id, f"INTEGRITY_VIOLATION: {json.dumps(violation)}")
     config = session.get("enforcement_config", {})
     if config.get("demo_mode", True) or config.get("level") == "OBSERVATION_ONLY":
@@ -428,6 +675,15 @@ async def terminate_integrity(session_id: str):
         raise HTTPException(404, "Session not found")
     session["integrity_paused"] = False
     await _relay_to_session(session_id, "INTEGRITY_TERMINATED:")
+
+    report_data = None
+    if brain and brain.coverage_map:
+        report_data = generate_report(brain)
+        report_data["session_id"] = session_id
+        report_data["integrity_violations"] = session.get("integrity_violations", [])
+        report_data["enforcement_config"] = session.get("enforcement_config", {})
+    asyncio.create_task(db_end_session(session_id, report_data))
+
     return {"ok": True}
 
 

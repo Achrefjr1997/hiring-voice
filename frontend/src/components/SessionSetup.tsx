@@ -4,7 +4,7 @@ export default function SessionSetup({
   onSubmit,
   loading,
 }: {
-  onSubmit: (jd: string, resume: string, rubric: string, duration: string, enforcementLevel: string, violationThreshold: number, gracePeriod: number, demoMode: boolean) => Promise<void>;
+  onSubmit: (jd: string, resume: string, rubric: string, duration: string, enforcementLevel: string, violationThreshold: number, gracePeriod: number, demoMode: boolean, candidateEmail?: string) => Promise<void>;
   loading: boolean;
 }) {
   const [jd, setJd] = useState("");
@@ -15,10 +15,11 @@ export default function SessionSetup({
   const [violationThreshold, setViolationThreshold] = useState("3");
   const [gracePeriod, setGracePeriod] = useState("1");
   const [demoMode, setDemoMode] = useState(true);
+  const [candidateEmail, setCandidateEmail] = useState("");
 
   const handleSubmit = async () => {
     if (!jd.trim() || !resume.trim()) return;
-    await onSubmit(jd, resume, rubric, duration, enforcementLevel, parseInt(violationThreshold) || 3, parseInt(gracePeriod) || 1, demoMode);
+    await onSubmit(jd, resume, rubric, duration, enforcementLevel, parseInt(violationThreshold) || 3, parseInt(gracePeriod) || 1, demoMode, candidateEmail || undefined);
   };
 
   return (
@@ -55,6 +56,17 @@ export default function SessionSetup({
           rows={4}
           placeholder="Paste your company's hiring rubric or evaluation criteria…"
           className="rounded-lg border border-gray-200 px-3 py-2 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-blue-200"
+        />
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <label className="text-sm font-medium text-gray-700">Candidate Email (optional)</label>
+        <input
+          type="email"
+          value={candidateEmail}
+          onChange={(e) => setCandidateEmail(e.target.value)}
+          placeholder="candidate@company.com"
+          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
         />
       </div>
 

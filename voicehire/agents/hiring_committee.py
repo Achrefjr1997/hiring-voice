@@ -1,7 +1,9 @@
 import json
+import asyncio
 from voicehire.api.client import AIMLAPIClient, MODELS
 from voicehire.band.agent_base import BandAgent
 from voicehire.util import normalize_keys
+from voicehire.db.operations import ROOM_TO_SESSION, db_insert_event
 
 ADVOCATE_PROMPT = """You are the Technical Advocate. Present the strongest case FOR hiring based on evidence. Cite evidence IDs."""
 CRITIC_PROMPT = """You are the Evidence Critic. Identify gaps, weak evidence, insufficient MUST_HAVE coverage. Be rigorous."""
@@ -71,6 +73,10 @@ class HiringCommittee(BandAgent):
         await self.send_event(room_id, message_content)
         await self.send_event(room_id, f"DELIBERATION_FULL: {json.dumps({'advocate': advocate, 'critic': critic})}")
         await self.send_event(room_id, "REPORT_READY")
+
+        session_id = ROOM_TO_SESSION.get(room_id)
+        if session_id:
+            asyncio.create_task(db_insert_event(session_id, "DELIBERATION", decision))
         print(f"[hiring-committee] Decision: {decision.get('final_recommendation', 'UNKNOWN')}")
 
     async def _call(self, system: str, user: str, response_format: dict | None = None) -> str:

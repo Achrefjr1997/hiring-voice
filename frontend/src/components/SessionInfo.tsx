@@ -1,4 +1,4 @@
-import { Copy, Check } from "lucide-react";
+import { Copy, Check, Send, CheckCircle2, FileText } from "lucide-react";
 import { useState } from "react";
 import type { CandidateStatus } from "../types";
 
@@ -14,19 +14,38 @@ export default function SessionInfo({
   candidateName,
   candidateStatus,
   isSessionReady,
+  candidateEmail,
+  onSendInvite,
+  sessionId,
 }: {
   sessionLink: string | null;
   candidateName: string | null;
   candidateStatus: CandidateStatus;
   isSessionReady: boolean;
+  candidateEmail?: string | null;
+  onSendInvite?: () => Promise<void>;
+  sessionId?: string;
 }) {
   const [copied, setCopied] = useState(false);
+  const [inviteSending, setInviteSending] = useState(false);
+  const [inviteSent, setInviteSent] = useState(false);
 
   const copyLink = () => {
     if (sessionLink) {
       navigator.clipboard.writeText(sessionLink);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handleSendInvite = async () => {
+    if (!onSendInvite) return;
+    setInviteSending(true);
+    try {
+      await onSendInvite();
+      setInviteSent(true);
+    } finally {
+      setInviteSending(false);
     }
   };
 
@@ -64,6 +83,42 @@ export default function SessionInfo({
               {isSessionReady ? (copied ? <Check size={12} className="text-green-500" /> : <Copy size={12} />) : null}
               {isSessionReady ? (copied ? "Copied" : "Copy") : "Initializing AI Agents..."}
             </button>
+          </div>
+        )}
+
+        {candidateEmail && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-400 flex-1">Invite: {candidateEmail}</span>
+            <button
+              onClick={handleSendInvite}
+              disabled={inviteSending || inviteSent}
+              className={`shrink-0 flex items-center gap-1 px-2 py-1 text-xs font-medium rounded border ${
+                inviteSent
+                  ? "border-green-200 text-green-600 bg-green-50"
+                  : "border-gray-200 text-gray-600 hover:bg-gray-50"
+              }`}
+            >
+              {inviteSent ? (
+                <CheckCircle2 size={12} />
+              ) : (
+                <Send size={12} />
+              )}
+              {inviteSending ? "Sending..." : inviteSent ? "Sent" : "Send Invite"}
+            </button>
+          </div>
+        )}
+
+        {sessionId && (
+          <div className="flex items-center gap-2 pt-1 border-t border-gray-100">
+            <span className="text-xs text-gray-400 flex-1">Export Report</span>
+            <a
+              href={`/session/${sessionId}/pdf`}
+              target="_blank"
+              className="shrink-0 flex items-center gap-1 px-2 py-1 text-xs font-medium rounded border border-gray-200 text-gray-600 hover:bg-gray-50"
+            >
+              <FileText size={12} />
+              Download PDF
+            </a>
           </div>
         )}
       </div>

@@ -6,6 +6,7 @@ import CandidateNameForm from "./CandidateNameForm";
 
 import VoiceInterface from "./VoiceInterface";
 import { AlertCircle, Clock, CheckCircle, Loader2, Mic, Monitor } from "lucide-react";
+import { Logo } from "./ui/Logo";
 
 
 type Stage = "validating" | "invalid" | "name-form" | "permissions" | "preparing" | "interview" | "finished";
@@ -206,55 +207,79 @@ export default function CandidateRoom() {
     const allGranted = micGranted && fullscreenGranted;
     return (
       <div className="flex items-center justify-center min-h-screen bg-surface-cream p-4">
-        <div className="w-full max-w-md bg-surface-cream rounded-radius-card border border-border-cream shadow-lg p-8">
-          <h1 className="text-h2 font-serif text-text-inverted mb-2">Almost Ready</h1>
-          <p className="text-body text-text-muted mb-6">
+        <div className="w-full max-w-md bg-white rounded-xl border-2 border-gray-200 shadow-xl p-8">
+          <h1 className="text-3xl font-serif text-gray-900 mb-2 text-center">Almost Ready</h1>
+          <p className="text-sm text-gray-600 mb-8 text-center">
             Grant the following permissions to enable your interview experience.
           </p>
 
-          <div className="space-y-4 mb-8">
-            <div className="flex items-center justify-between p-4 rounded-radius-card border border-border-cream bg-[#F5F2EB]">
-              <div className="flex items-center gap-3">
-                <div className={`w-9 h-9 rounded-full flex items-center justify-center ${micGranted ? "bg-status-live/15" : "bg-accent-gold/10"}`}>
+          <div className="space-y-4 mb-6">
+            {/* Microphone Permission */}
+            <div className={`flex items-center justify-between p-4 rounded-lg border-2 transition-all ${
+              micGranted
+                ? "border-green-200 bg-green-50"
+                : "border-gray-200 bg-gray-50"
+            }`}>
+              <div className="flex items-center gap-3 flex-1">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+                  micGranted ? "bg-green-100" : "bg-yellow-100"
+                }`}>
                   {micGranted
-                    ? <CheckCircle size={18} className="text-status-live" />
-                    : <Mic size={18} className="text-accent-gold" />
+                    ? <CheckCircle size={20} className="text-green-600" />
+                    : <Mic size={20} className="text-yellow-600" />
                   }
                 </div>
-                <div>
-                  <p className="text-[14px] font-medium text-text-inverted">Microphone Access</p>
-                  <p className="text-caption text-text-muted">Required to record your responses</p>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-gray-900">Microphone Access</p>
+                  <p className="text-xs text-gray-600">Required to record your responses</p>
                 </div>
               </div>
-              {!micGranted && (
+              {micGranted ? (
+                <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-green-100 border border-green-300">
+                  <CheckCircle size={16} className="text-green-700" />
+                  <span className="text-sm font-semibold text-green-700">Granted</span>
+                </div>
+              ) : (
                 <button
                   onClick={handleGrantMic}
                   disabled={permissionsLoading === "mic"}
-                  className="px-4 py-1.5 text-caption font-medium rounded-radius-card bg-accent-gold text-text-on-accent hover:brightness-110 disabled:opacity-50 transition-all shrink-0"
+                  className="px-5 py-2 text-sm font-semibold rounded-lg bg-accent-gold text-gray-900 hover:brightness-110 disabled:opacity-50 transition-all shrink-0 shadow-sm"
                 >
                   {permissionsLoading === "mic" ? "Granting…" : "Grant"}
                 </button>
               )}
             </div>
 
-            <div className="flex items-center justify-between p-4 rounded-radius-card border border-border-cream bg-[#F5F2EB]">
-              <div className="flex items-center gap-3">
-                <div className={`w-9 h-9 rounded-full flex items-center justify-center ${fullscreenGranted ? "bg-status-live/15" : "bg-accent-gold/10"}`}>
+            {/* Fullscreen Permission */}
+            <div className={`flex items-center justify-between p-4 rounded-lg border-2 transition-all ${
+              fullscreenGranted
+                ? "border-green-200 bg-green-50"
+                : "border-gray-200 bg-gray-50"
+            }`}>
+              <div className="flex items-center gap-3 flex-1">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+                  fullscreenGranted ? "bg-green-100" : "bg-yellow-100"
+                }`}>
                   {fullscreenGranted
-                    ? <CheckCircle size={18} className="text-status-live" />
-                    : <Monitor size={18} className="text-accent-gold" />
+                    ? <CheckCircle size={20} className="text-green-600" />
+                    : <Monitor size={20} className="text-yellow-600" />
                   }
                 </div>
-                <div>
-                  <p className="text-[14px] font-medium text-text-inverted">Fullscreen Access</p>
-                  <p className="text-caption text-text-muted">Provides a distraction-free experience</p>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-gray-900">Fullscreen Mode</p>
+                  <p className="text-xs text-gray-600">Provides a distraction-free experience</p>
                 </div>
               </div>
-              {!fullscreenGranted && (
+              {fullscreenGranted ? (
+                <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-green-100 border border-green-300">
+                  <CheckCircle size={16} className="text-green-700" />
+                  <span className="text-sm font-semibold text-green-700">Granted</span>
+                </div>
+              ) : (
                 <button
                   onClick={handleGrantFullscreen}
                   disabled={permissionsLoading === "fullscreen"}
-                  className="px-4 py-1.5 text-caption font-medium rounded-radius-card bg-accent-gold text-text-on-accent hover:brightness-110 disabled:opacity-50 transition-all shrink-0"
+                  className="px-5 py-2 text-sm font-semibold rounded-lg bg-accent-gold text-gray-900 hover:brightness-110 disabled:opacity-50 transition-all shrink-0 shadow-sm"
                 >
                   {permissionsLoading === "fullscreen" ? "Granting…" : "Grant"}
                 </button>
@@ -262,15 +287,38 @@ export default function CandidateRoom() {
             </div>
           </div>
 
+          {/* Helper Text */}
+          {!allGranted && (
+            <div className="mb-4 p-3 rounded-lg bg-blue-50 border border-blue-200 flex items-start gap-2">
+              <svg className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <p className="text-xs text-blue-700">
+                Please grant both permissions to continue to your interview.
+              </p>
+            </div>
+          )}
+
+          {/* Start Interview Button */}
           <button
             onClick={handleStartFromPermissions}
             disabled={!allGranted}
-            className="w-full px-6 py-3 rounded-radius-card bg-accent-gold text-text-on-accent text-body font-semibold hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            className={`w-full px-6 py-4 rounded-lg text-base font-bold transition-all shadow-md ${
+              allGranted
+                ? "bg-accent-gold text-gray-900 hover:brightness-110 cursor-pointer"
+                : "bg-gray-200 text-gray-400 cursor-not-allowed"
+            }`}
           >
-            Start Interview
+            {allGranted ? "Start Interview" : "Waiting for Permissions..."}
           </button>
 
-          <p className="text-caption text-text-muted text-center mt-3">🔒 Your session is secure and encrypted.</p>
+          {/* Security Message */}
+          <p className="text-sm text-gray-500 text-center mt-4 flex items-center justify-center gap-2">
+            <svg className="w-4 h-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+            Your session is secure and encrypted
+          </p>
         </div>
       </div>
     );
@@ -314,6 +362,8 @@ export default function CandidateRoom() {
     return (
       <div className="flex items-center justify-center min-h-screen p-4">
         <div className="w-full max-w-md bg-surface-cream rounded-radius-card border border-border-cream shadow-lg p-8 text-center">
+          <Logo size="xl" animate="pulse" className="mx-auto mb-6" />
+
           <div className="w-20 h-20 rounded-full bg-accent-gold/10 flex items-center justify-center mx-auto mb-5">
             <svg className="w-10 h-10 text-accent-gold checkmark-draw" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -363,13 +413,16 @@ export default function CandidateRoom() {
   return (
     <>
       <div className="fixed top-0 left-0 right-0 z-40 bg-[#F5F2EB] border-b border-border-cream px-6 py-3 flex items-center justify-between">
-        <div>
-          <p className="text-[15px] font-semibold text-text-inverted">
-            {sessionInfo?.title || `${sessionId?.slice(0, 8) ?? "Interview"}`}
-          </p>
-          <p className="text-caption text-text-muted">
-            {sessionInfo?.title ? `Session: ${sessionId?.slice(0, 8)}` : ""}
-          </p>
+        <div className="flex items-center gap-4">
+          <Logo size="xs" withText textPosition="right" />
+          <div className="border-l border-border-cream pl-4">
+            <p className="text-[15px] font-semibold text-text-inverted">
+              {sessionInfo?.title || `${sessionId?.slice(0, 8) ?? "Interview"}`}
+            </p>
+            <p className="text-caption text-text-muted">
+              {sessionInfo?.title ? `Session: ${sessionId?.slice(0, 8)}` : ""}
+            </p>
+          </div>
         </div>
         <button
           onClick={handleFinish}

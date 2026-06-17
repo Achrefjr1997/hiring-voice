@@ -1,5 +1,5 @@
 ﻿import { useEffect, useRef, useState, useMemo } from "react";
-import { Monitor, ArrowLeftRight, EyeOff, AlertTriangle, ChevronDown, ChevronRight, X } from "lucide-react";
+import { Monitor, ArrowLeftRight, EyeOff, AlertTriangle, ChevronDown, ChevronRight, X, FileOff, Clock, Download, FileText, Calendar } from "lucide-react";
 import type { HiringDecision, IntegrityViolation, EnforcementConfig } from "../types";
 
 interface ConversationEntry {
@@ -71,11 +71,18 @@ const SECTION_NAV = [
 type VerdictState = "PENDING" | "STRONG_NO_HIRE" | "NO_HIRE" | "HIRE" | "STRONG_HIRE";
 
 const VERDICT_STYLES: Record<VerdictState, { bg: string; border: string; text: string }> = {
-  PENDING: { bg: "bg-red-50", border: "border-red-200", text: "text-red-600" },
+  PENDING: { bg: "bg-yellow-50", border: "border-yellow-200", text: "text-yellow-700" },
   STRONG_NO_HIRE: { bg: "bg-red-50", border: "border-red-200", text: "text-red-800" },
   NO_HIRE: { bg: "bg-red-50", border: "border-red-200", text: "text-red-700" },
   HIRE: { bg: "bg-green-50", border: "border-green-200", text: "text-green-700" },
   STRONG_HIRE: { bg: "bg-green-50", border: "border-green-200", text: "text-green-900" },
+};
+
+const STATUS_STYLES: Record<string, { bg: string; border: string; text: string }> = {
+  completed: { bg: "bg-green-50", border: "border-green-200", text: "text-green-700" },
+  pending: { bg: "bg-yellow-50", border: "border-yellow-200", text: "text-yellow-700" },
+  failed: { bg: "bg-red-50", border: "border-red-200", text: "text-red-700" },
+  in_progress: { bg: "bg-blue-50", border: "border-blue-200", text: "text-blue-700" },
 };
 
 const VERDICT_LABELS: Record<VerdictState, string> = {
@@ -317,49 +324,72 @@ export default function ReportView({ sessionId, decision, deliberationFullText, 
 
             {/* ───── Section 1: Executive Summary ───── */}
             <section id="executive-summary">
-              <div className={`rounded-lg border ${VERDICT_STYLES[verdict].border} ${VERDICT_STYLES[verdict].bg} p-4`}>
-                <div className="flex items-center gap-3">
-                  {isPending ? (
-                    <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
-                      <X size={16} className="text-red-600" />
+              <div className={`rounded-lg border ${VERDICT_STYLES[verdict].border} ${VERDICT_STYLES[verdict].bg} p-5`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {isPending ? (
+                      <div className="w-10 h-10 rounded-full bg-yellow-100 flex items-center justify-center flex-shrink-0">
+                        <Clock size={20} className="text-yellow-600" />
+                      </div>
+                    ) : isPositive ? (
+                      <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                        <span className="text-green-700 text-xl leading-none">✓</span>
+                      </div>
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                        <X size={20} className="text-red-800" />
+                      </div>
+                    )}
+                    <div>
+                      <span className={`text-lg font-semibold ${VERDICT_STYLES[verdict].text}`}>
+                        {VERDICT_LABELS[verdict]}
+                      </span>
+                      <p className="text-xs text-gray-500 mt-0.5">Interview Status: {report.status ?? "Pending"}</p>
                     </div>
-                  ) : isPositive ? (
-                    <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-                      <span className="text-green-700 text-lg leading-none">✓</span>
-                    </div>
-                  ) : (
-                    <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
-                      <X size={16} className="text-red-800" />
+                  </div>
+
+                  {/* Action Buttons */}
+                  {report.status?.toLowerCase() === "completed" && (
+                    <div className="flex gap-2">
+                      <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-gray-300 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+                        <Download size={14} />
+                        Download Report
+                      </button>
                     </div>
                   )}
-                  <span className={`text-sm font-medium ${VERDICT_STYLES[verdict].text}`}>
-                    {VERDICT_LABELS[verdict]}
-                  </span>
+
+                  {isPending && (
+                    <div className="flex items-center gap-2 text-yellow-600">
+                      <div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
+                      <span className="text-xs font-medium">Waiting for completion...</span>
+                    </div>
+                  )}
                 </div>
+
                 {isPending ? (
-                  <div className="flex gap-6 mt-3">
+                  <div className="flex gap-6 mt-4 pt-4 border-t border-yellow-200">
                     <div>
-                      <p className="text-[11px] text-gray-400">Must-haves covered</p>
-                      <p className="text-xl font-medium text-gray-400">—</p>
+                      <p className="text-xs text-gray-500">Must-haves covered</p>
+                      <p className="text-2xl font-medium text-gray-400">—</p>
                     </div>
                     <div className="w-[0.5px] bg-gray-200" />
                     <div>
-                      <p className="text-[11px] text-gray-400">Total competencies</p>
-                      <p className="text-xl font-medium text-gray-400">—</p>
+                      <p className="text-xs text-gray-500">Total competencies</p>
+                      <p className="text-2xl font-medium text-gray-400">—</p>
                     </div>
                   </div>
                 ) : (
-                  <div className="flex gap-6 mt-3">
+                  <div className="flex gap-6 mt-4 pt-4 border-t border-gray-200">
                     <div>
-                      <p className="text-[11px] text-gray-500">Must-haves covered</p>
-                      <p className="text-xl font-medium text-gray-900">
+                      <p className="text-xs text-gray-500">Must-haves covered</p>
+                      <p className="text-2xl font-semibold text-gray-900">
                         {summary.must_have_covered}/{summary.must_have_total}
                       </p>
                     </div>
                     <div className="w-[0.5px] bg-gray-200" />
                     <div>
-                      <p className="text-[11px] text-gray-500">Total competencies</p>
-                      <p className="text-xl font-medium text-gray-900">
+                      <p className="text-xs text-gray-500">Total competencies</p>
+                      <p className="text-2xl font-semibold text-gray-900">
                         {summary.covered}/{summary.total}
                       </p>
                     </div>
@@ -370,9 +400,16 @@ export default function ReportView({ sessionId, decision, deliberationFullText, 
 
             {/* ───── Section 2: Competency Scorecard ───── */}
             <section id="competency-scorecard">
-              <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Competency Scorecard</h2>
+              <h2 className="text-base font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                <FileText size={18} className="text-gray-500" />
+                Competency Scorecard
+              </h2>
               {scores.length === 0 ? (
-                <p className="text-sm text-gray-400 italic">No competency data available.</p>
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
+                  <FileOff size={32} className="text-gray-300 mx-auto mb-3" />
+                  <p className="text-sm font-medium text-gray-600 mb-1">No Competency Data Available</p>
+                  <p className="text-xs text-gray-400">The competency scorecard will appear here once the interview is completed and analyzed.</p>
+                </div>
               ) : (
                 <div>
                   {displayScores.map((c) => (
@@ -432,9 +469,16 @@ export default function ReportView({ sessionId, decision, deliberationFullText, 
 
             {/* ───── Section 3: Evidence Timeline ───── */}
             <section id="evidence-timeline">
-              <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Evidence Timeline</h2>
+              <h2 className="text-base font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                <Clock size={18} className="text-gray-500" />
+                Evidence Timeline
+              </h2>
               {evidence.length === 0 ? (
-                <p className="text-sm text-gray-400 italic">No evidence collected.</p>
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
+                  <Clock size={32} className="text-gray-300 mx-auto mb-3" />
+                  <p className="text-sm font-medium text-gray-600 mb-1">No Evidence Collected Yet</p>
+                  <p className="text-xs text-gray-400">Evidence from candidate responses will be extracted and displayed here during the interview.</p>
+                </div>
               ) : (
                 <div>
                   {displayEvidence.map((ev, i) => {
@@ -500,20 +544,23 @@ export default function ReportView({ sessionId, decision, deliberationFullText, 
             <section id="full-transcript">
               <button
                 onClick={() => setTranscriptExpanded(!transcriptExpanded)}
-                className="flex items-center justify-between w-full text-left"
+                className="flex items-center justify-between w-full text-left hover:opacity-70 transition-opacity"
               >
-                <div>
-                  <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
-                    Full Interview Transcript
-                  </h2>
-                  {!transcriptExpanded && (
-                    <p className="text-[11px] text-gray-400 mt-0.5">
-                      {formatDuration(transcriptDuration)} &middot; {history.length} turn{history.length !== 1 ? "s" : ""}
-                    </p>
-                  )}
+                <div className="flex items-center gap-2">
+                  <FileText size={18} className="text-gray-500" />
+                  <div>
+                    <h2 className="text-base font-semibold text-gray-800">
+                      Full Interview Transcript
+                    </h2>
+                    {!transcriptExpanded && (
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {formatDuration(transcriptDuration)} &middot; {history.length} turn{history.length !== 1 ? "s" : ""}
+                      </p>
+                    )}
+                  </div>
                 </div>
-                <span className="text-gray-300">
-                  {transcriptExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                <span className="text-gray-400">
+                  {transcriptExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
                 </span>
               </button>
 
@@ -572,9 +619,16 @@ export default function ReportView({ sessionId, decision, deliberationFullText, 
 
             {/* ───── Section 5: Committee Deliberation ───── */}
             <section id="committee-deliberation">
-              <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Committee Deliberation</h2>
+              <h2 className="text-base font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                <AlertTriangle size={18} className="text-gray-500" />
+                Committee Deliberation
+              </h2>
               {!deliberationText ? (
-                <p className="text-sm text-gray-400 italic">Deliberation text not available.</p>
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
+                  <FileOff size={32} className="text-gray-300 mx-auto mb-3" />
+                  <p className="text-sm font-medium text-gray-600 mb-1">Deliberation Pending</p>
+                  <p className="text-xs text-gray-400">The hiring committee will deliberate once the interview is completed. The advocate and critic arguments will appear here.</p>
+                </div>
               ) : (
                 <div>
                   <div className="grid grid-cols-2 gap-4">
@@ -643,54 +697,86 @@ export default function ReportView({ sessionId, decision, deliberationFullText, 
 
             {/* ───── Section 6: Integrity Audit ───── */}
             <section id="integrity-audit">
-              <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Integrity Audit</h2>
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-[22px] font-medium text-red-600 leading-none">{violations.length}</span>
-                  <span className="text-[11px] text-gray-400">
-                    violation{violations.length !== 1 ? "s" : ""} recorded
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] text-gray-400">Enforcement mode</span>
-                  <span className="text-[13px] font-medium text-gray-900">
-                    {enforcement?.level?.replace(/_/g, " ") ?? "N/A"}
-                  </span>
+              <h2 className="text-base font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                <Monitor size={18} className="text-gray-500" />
+                Integrity Audit
+              </h2>
+
+              {/* Summary Card */}
+              <div className="bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 rounded-lg p-4 mb-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
+                      <span className="text-xl font-bold text-red-600">{violations.length}</span>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Total Violations</p>
+                      <p className="text-sm font-medium text-gray-900">
+                        {violations.reduce((sum, v) => sum + v.points, 0)} integrity points
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-gray-500 mb-1">Enforcement Mode</p>
+                    <span className="inline-block px-2.5 py-1 rounded-md bg-white border border-gray-200 text-xs font-medium text-gray-900">
+                      {enforcement?.level?.replace(/_/g, " ") ?? "N/A"}
+                    </span>
+                  </div>
                 </div>
               </div>
+
               {violations.length === 0 ? (
-                <p className="text-sm text-gray-400 italic">No integrity violations detected.</p>
+                <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center">
+                  <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-3">
+                    <span className="text-green-700 text-2xl">✓</span>
+                  </div>
+                  <p className="text-sm font-medium text-green-700 mb-1">No Violations Detected</p>
+                  <p className="text-xs text-gray-600">The candidate maintained integrity throughout the interview session.</p>
+                </div>
               ) : (
-                <div>
+                <div className="space-y-2">
                   {displayViolations.map((v, i) => {
                     const Icon = violationIcon(v.type);
                     const isHighSeverity = v.points >= 2;
                     return (
                       <div
                         key={i}
-                        className="flex items-center gap-2 py-2 border-b-[0.5px] border-gray-100 last:border-b-0"
+                        className={`flex items-center gap-3 p-3 rounded-lg border ${
+                          isHighSeverity
+                            ? "bg-red-50 border-red-200"
+                            : "bg-gray-50 border-gray-200"
+                        }`}
                       >
-                        <Icon size={14} className={isHighSeverity ? "text-red-500" : "text-gray-300"} />
-                        <span className="text-xs text-gray-900 flex-1">{violationLabel(v.type)}</span>
-                        <span className="text-[11px] font-mono text-gray-400">
-                          {new Date(v.timestamp).toLocaleTimeString("en-GB", {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                            hour12: false,
-                          })}
+                        <Icon size={18} className={isHighSeverity ? "text-red-500" : "text-gray-400"} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900">{violationLabel(v.type)}</p>
+                          <p className="text-xs text-gray-500 font-mono">
+                            {new Date(v.timestamp).toLocaleTimeString("en-GB", {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                              second: "2-digit",
+                              hour12: false,
+                            })}
+                          </p>
+                        </div>
+                        <span className={`px-2.5 py-1 rounded-md text-xs font-bold ${
+                          isHighSeverity
+                            ? "bg-red-100 text-red-700 border border-red-300"
+                            : "bg-gray-100 text-gray-600 border border-gray-300"
+                        }`}>
+                          {v.points} pt
                         </span>
-                        <span className="text-[11px] font-medium text-red-600 w-8 text-right">{v.points}pt</span>
                       </div>
                     );
                   })}
                   {violations.length > 3 && (
                     <button
                       onClick={() => setShowAllViolations(!showAllViolations)}
-                      className="mt-2 text-xs font-medium text-[#C9A84C] hover:text-[#b8993a] transition-colors"
+                      className="mt-3 text-sm font-medium text-[#C9A84C] hover:text-[#b8993a] transition-colors"
                     >
                       {showAllViolations
                         ? "Show less"
-                        : `+ ${violations.length - 3} more violation${violations.length - 3 !== 1 ? "s" : ""}`}
+                        : `View all ${violations.length} violations`}
                     </button>
                   )}
                 </div>
@@ -699,27 +785,42 @@ export default function ReportView({ sessionId, decision, deliberationFullText, 
 
             {/* ───── Section 7: Session Metadata ───── */}
             <section id="session-metadata">
-              <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Session Metadata</h2>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="bg-gray-50 rounded-md px-3 py-2.5">
-                  <p className="text-[11px] text-gray-400">Session ID</p>
-                  <p className="text-[13px] font-medium font-mono text-gray-900">{sessionId}</p>
-                </div>
-                <div className="bg-gray-50 rounded-md px-3 py-2.5">
-                  <p className="text-[11px] text-gray-400">Status</p>
-                  <p className="text-[13px] font-medium font-mono text-gray-900">{report.status ?? "N/A"}</p>
-                </div>
-                <div className="bg-gray-50 rounded-md px-3 py-2.5 col-span-2">
-                  <p className="text-[11px] text-gray-400">Model</p>
-                  <p className="text-[11px] font-medium font-mono text-gray-900 leading-relaxed">
-                    {decision?.model_used ?? (report as any).model_used ?? "N/A"}
-                  </p>
-                </div>
-                <div className="bg-gray-50 rounded-md px-3 py-2.5">
-                  <p className="text-[11px] text-gray-400">Consensus</p>
-                  <p className="text-[13px] font-medium font-mono text-gray-900">
-                    {decision?.consensus_reached ? "Reached" : "Not reached"}
-                  </p>
+              <h2 className="text-base font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                <Calendar size={18} className="text-gray-500" />
+                Session Metadata
+              </h2>
+              <div className="bg-white border border-gray-200 rounded-lg p-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Session ID</p>
+                    <p className="text-sm font-mono text-gray-900 break-all">{sessionId}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Status</p>
+                    <span className={`inline-block px-2.5 py-1 rounded-md text-xs font-medium ${
+                      STATUS_STYLES[report.status?.toLowerCase() ?? "pending"]?.bg ?? "bg-gray-50"
+                    } ${
+                      STATUS_STYLES[report.status?.toLowerCase() ?? "pending"]?.text ?? "text-gray-700"
+                    } ${
+                      STATUS_STYLES[report.status?.toLowerCase() ?? "pending"]?.border ?? "border-gray-200"
+                    } border`}>
+                      {report.status ?? "Pending"}
+                    </span>
+                  </div>
+                  <div className="col-span-2">
+                    <p className="text-xs text-gray-500 mb-1">Model</p>
+                    <p className="text-xs font-mono text-gray-900">
+                      {decision?.model_used ?? (report as any).model_used ?? "N/A"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Consensus</p>
+                    <span className={`inline-block px-2.5 py-1 rounded-md text-xs font-medium ${
+                      decision?.consensus_reached ? "bg-green-50 text-green-700 border-green-200" : "bg-gray-50 text-gray-600 border-gray-200"
+                    } border`}>
+                      {decision?.consensus_reached ? "Reached" : "Not reached"}
+                    </span>
+                  </div>
                 </div>
               </div>
             </section>

@@ -1,4 +1,4 @@
-import { Copy, Check, Send, CheckCircle2, FileText } from "lucide-react";
+import { Copy, Check, Send, CheckCircle2, FileText, Download, Link as LinkIcon, Mail, Clock } from "lucide-react";
 import { useState } from "react";
 import type { CandidateStatus } from "../types";
 
@@ -50,72 +50,111 @@ export default function SessionInfo({
   };
 
   const status = STATUS_LABELS[candidateStatus];
+  const isWaiting = candidateStatus === "waiting";
 
   return (
-    <div className="flex flex-col gap-1.5 p-4">
-      {/* Status badge + candidate name */}
-      <div className="flex items-center gap-3">
-        <h2 className="text-caption font-medium text-text-secondary uppercase tracking-wide">Session</h2>
-        <span className={`px-2 py-0.5 rounded-radius-card text-caption font-medium border ${status.color}`}>
-          {status.text}
-        </span>
+    <div className="flex flex-col gap-4 p-5">
+      {/* Session Status Card */}
+      <div className={`rounded-lg border-2 p-4 ${
+        isWaiting
+          ? "bg-blue-50 border-blue-200"
+          : candidateStatus === "connected"
+          ? "bg-green-50 border-green-200"
+          : candidateStatus === "finished"
+          ? "bg-yellow-50 border-yellow-200"
+          : "bg-red-50 border-red-200"
+      }`}>
+        <div className="flex items-center gap-3 mb-2">
+          {isWaiting && (
+            <div className="w-3 h-3 rounded-full bg-blue-500 animate-pulse" />
+          )}
+          {candidateStatus === "connected" && (
+            <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
+          )}
+          <span className={`text-sm font-semibold ${
+            isWaiting
+              ? "text-blue-700"
+              : candidateStatus === "connected"
+              ? "text-green-700"
+              : candidateStatus === "finished"
+              ? "text-yellow-700"
+              : "text-red-700"
+          }`}>
+            {status.text}
+          </span>
+        </div>
+        {candidateName && (
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-gray-600">Candidate:</span>
+            <span className="font-semibold text-gray-900">{candidateName}</span>
+          </div>
+        )}
       </div>
 
-      {candidateName && (
-        <div className="text-body">
-          <span className="text-caption text-text-muted">Candidate: </span>
-          <span className="font-medium text-text-primary">{candidateName}</span>
-        </div>
-      )}
-
+      {/* Session Link */}
       {sessionLink && (
-        <div className="flex items-center gap-2">
-          <span className="text-caption text-text-muted truncate flex-1 font-mono">{sessionLink}</span>
-          <button
-            onClick={copyLink}
-            disabled={!isSessionReady}
-            className={`shrink-0 flex items-center gap-1 px-2 py-1 text-caption font-medium rounded-radius-card border transition-colors ${
-              isSessionReady
-                ? "border-border-default text-text-secondary hover:bg-surface-hover"
-                : "border-border-default text-text-muted cursor-not-allowed opacity-50"
-            }`}
-          >
-            {isSessionReady ? (copied ? <Check size={12} className="text-status-live" /> : <Copy size={12} />) : null}
-            {isSessionReady ? (copied ? "Copied" : "Copy") : "Initializing..."}
-          </button>
+        <div className="bg-surface-default border border-border-default rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <LinkIcon size={16} className="text-gray-400" />
+            <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Interview Link</span>
+          </div>
+          <div className="flex items-center gap-2 bg-surface-raised border border-border-default rounded-lg p-2.5">
+            <span className="text-xs text-text-muted truncate flex-1 font-mono">{sessionLink}</span>
+            <button
+              onClick={copyLink}
+              disabled={!isSessionReady}
+              className={`shrink-0 p-2 rounded-lg transition-all ${
+                isSessionReady
+                  ? copied
+                    ? "bg-green-100 text-green-700"
+                    : "hover:bg-surface-hover text-gray-600"
+                  : "text-text-muted cursor-not-allowed opacity-50"
+              }`}
+              title={isSessionReady ? (copied ? "Copied!" : "Copy link") : "Initializing..."}
+            >
+              {isSessionReady ? (copied ? <Check size={16} /> : <Copy size={16} />) : <Clock size={16} />}
+            </button>
+          </div>
         </div>
       )}
 
+      {/* Candidate Email */}
       {candidateEmail && (
-        <div className="flex items-center gap-2">
-          <span className="text-caption text-text-muted flex-1">Invite: {candidateEmail}</span>
-          <button
-            onClick={handleSendInvite}
-            disabled={inviteSending || inviteSent}
-            className={`shrink-0 flex items-center gap-1 px-2 py-1 text-caption font-medium rounded-radius-card border transition-colors ${
-              inviteSent
-                ? "border-status-live/30 text-status-live bg-status-live/10"
-                : "border-border-default text-text-secondary hover:bg-surface-hover"
-            }`}
-          >
-            {inviteSent ? <CheckCircle2 size={12} /> : <Send size={12} />}
-            {inviteSending ? "Sending..." : inviteSent ? "Sent" : "Send Invite"}
-          </button>
+        <div className="bg-surface-default border border-border-default rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Mail size={16} className="text-gray-400" />
+            <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Invitation</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex-1 bg-surface-raised border border-border-default rounded-lg px-3 py-2">
+              <span className="text-sm text-text-primary">{candidateEmail}</span>
+            </div>
+            <button
+              onClick={handleSendInvite}
+              disabled={inviteSending || inviteSent}
+              className={`shrink-0 p-2 rounded-lg transition-all ${
+                inviteSent
+                  ? "bg-green-100 text-green-700"
+                  : "bg-blue-500 hover:bg-blue-600 text-white"
+              } disabled:opacity-50`}
+              title={inviteSending ? "Sending..." : inviteSent ? "Sent!" : "Send email invitation"}
+            >
+              {inviteSent ? <CheckCircle2 size={16} /> : <Send size={16} />}
+            </button>
+          </div>
         </div>
       )}
 
+      {/* Export Report */}
       {sessionId && (
-        <div className="flex items-center gap-2 pt-1.5 border-t border-border-default">
-          <span className="text-caption text-text-muted flex-1">Export Report</span>
-          <a
-            href={`/session/${sessionId}/pdf`}
-            target="_blank"
-            className="shrink-0 flex items-center gap-1 px-2 py-1 text-caption font-medium rounded-radius-card border border-border-default text-text-secondary hover:bg-surface-hover transition-colors"
-          >
-            <FileText size={12} />
-            Download PDF
-          </a>
-        </div>
+        <a
+          href={`/session/${sessionId}/pdf`}
+          target="_blank"
+          className="flex items-center justify-center gap-2 px-4 py-3 bg-accent-gold text-bg-primary rounded-lg font-semibold text-sm hover:brightness-110 transition-all shadow-sm"
+        >
+          <Download size={18} />
+          Download PDF Report
+        </a>
       )}
     </div>
   );

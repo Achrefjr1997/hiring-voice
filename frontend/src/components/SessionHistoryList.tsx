@@ -61,18 +61,18 @@ export default function SessionHistoryList({
                   className="border-b border-border-default hover:bg-surface-hover cursor-pointer transition-colors last:border-0"
                   onClick={() => navigate(`/report/${s.id}?back=history`)}
                 >
-                  <td className="py-3 px-4 text-text-secondary">
+                  <td className="py-4 px-4 text-text-secondary">
                     {s.created_at ? new Date(s.created_at * 1000).toLocaleDateString() : "—"}
                   </td>
-                  <td className="py-3 px-4 font-medium text-text-primary">
+                  <td className="py-4 px-4 font-medium text-text-primary">
                     {s.candidate_name || "—"}
                   </td>
-                  <td className="py-3 px-4">
+                  <td className="py-4 px-4">
                     <span className={`inline-block px-2 py-0.5 rounded-radius-card text-caption font-medium border ${STATUS_BADGES[s.status] ?? "bg-surface-raised text-text-muted border-border-default"}`}>
                       {s.status}
                     </span>
                   </td>
-                  <td className="py-3 px-4 text-right text-text-secondary">{s.violation_count}</td>
+                  <td className="py-4 px-4 text-right text-text-secondary">{s.violation_count}</td>
                 </tr>
               ))}
             </tbody>

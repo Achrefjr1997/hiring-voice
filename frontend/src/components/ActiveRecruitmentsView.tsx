@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "./AuthProvider";
 import JobDetailsModal from "./JobDetailsModal";
 import EditJobModal from "./EditJobModal";
+import { MapPin, Users, Building2, Calendar, MoreVertical, Eye, Edit2, Send, XCircle, Trash2 } from "lucide-react";
 
 type FilterTab = "all" | "active" | "draft" | "closed";
 
@@ -28,16 +29,16 @@ const TABS: { id: FilterTab; label: string }[] = [
   { id: "closed", label: "Closed" },
 ];
 
-const STATUS_CONFIG: Record<string, { badgeClass: string; dot: string }> = {
-  active: { badgeClass: "text-status-live bg-status-live/[0.12]", dot: "🟢" },
-  draft: { badgeClass: "text-status-warning bg-status-warning/[0.12]", dot: "🟡" },
-  closed: { badgeClass: "text-text-muted bg-white/[0.06]", dot: "🔴" },
+const STATUS_CONFIG: Record<string, { bg: string; text: string; border: string }> = {
+  active: { bg: "bg-green-50", text: "text-green-700", border: "border-green-200" },
+  draft: { bg: "bg-orange-50", text: "text-orange-700", border: "border-orange-200" },
+  closed: { bg: "bg-gray-100", text: "text-gray-600", border: "border-gray-200" },
 };
 
-function formatDeadline(d: string | null): string {
-  if (!d) return "—";
+function formatDeadline(d: string | null): string | null {
+  if (!d) return null;
   const date = new Date(d);
-  return date.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
 export default function ActiveRecruitmentsView() {
@@ -48,6 +49,7 @@ export default function ActiveRecruitmentsView() {
   const [filter, setFilter] = useState<FilterTab>("all");
   const [viewingJob, setViewingJob] = useState<Job | null>(null);
   const [editingJob, setEditingJob] = useState<Job | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   const fetchJobs = useCallback(async () => {
     if (!token) return;
@@ -104,16 +106,16 @@ export default function ActiveRecruitmentsView() {
 
   return (
     <>
-      <div className="flex gap-0 px-8 border-b border-border-default">
+      <div className="flex gap-1 px-8 border-b border-border-default bg-surface-raised">
         {TABS.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setFilter(tab.id)}
             className={
-              "px-5 py-3 text-caption border-b-2 transition-colors " +
+              "px-6 py-3 text-sm font-medium transition-all duration-200 border-b-2 " +
               (filter === tab.id
-                ? "text-accent-gold border-b-accent-gold font-medium"
-                : "text-text-muted border-b-transparent hover:text-text-primary")
+                ? "text-accent-gold border-b-accent-gold bg-surface-default"
+                : "text-gray-400 border-b-transparent hover:text-text-primary hover:bg-surface-hover")
             }
           >
             {tab.label}
@@ -139,58 +141,118 @@ export default function ActiveRecruitmentsView() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-5">
             {jobs.map((job) => {
               const cfg = STATUS_CONFIG[job.status] || STATUS_CONFIG.draft;
+              const deadline = formatDeadline(job.deadline);
+              const isMenuOpen = openMenuId === job.id;
+
               return (
                 <div
                   key={job.id}
-                  className="bg-surface-default border border-border-default rounded-radius-card p-5 hover:border-border-light hover:-translate-y-0.5 transition-all"
+                  className="bg-surface-default border border-border-default rounded-lg p-6 hover:border-border-light hover:shadow-md transition-all duration-200"
                 >
-                  <div className="flex items-start justify-between mb-3">
-                    <h3 className="text-body font-semibold text-text-primary">{job.title}</h3>
-                    <span className={`text-[11px] font-medium px-2.5 py-0.5 rounded-radius-pill ${cfg.badgeClass}`}>
-                      {cfg.dot} {job.status.charAt(0).toUpperCase() + job.status.slice(1)}
-                    </span>
-                  </div>
-                  <div className="flex gap-4 flex-wrap text-[12px] text-text-muted mb-4">
-                    {job.department && <span>🏢 {job.department}</span>}
-                    {job.location && <span>📍 {job.location}</span>}
-                    <span>👥 {job.applicant_count} Applicant{job.applicant_count !== 1 ? "s" : ""}</span>
-                    <span>📅 Deadline: {formatDeadline(job.deadline)}</span>
-                  </div>
-                  <div className="flex gap-2 pt-3 border-t border-border-default">
-                    <button onClick={() => setViewingJob(job)} className="px-3.5 py-1.5 text-[11px] text-text-muted border border-border-default rounded-radius-input hover:border-accent-gold hover:text-accent-gold transition-colors">
-                      View Details
-                    </button>
-                    <button onClick={() => setEditingJob(job)} className="px-3.5 py-1.5 text-[11px] text-text-muted border border-border-default rounded-radius-input hover:border-accent-gold hover:text-accent-gold transition-colors">
-                      Edit
-                    </button>
-                    {job.status === "draft" && (
+                  {/* Header */}
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex-1 pr-4">
+                      <h3 className="text-lg font-semibold text-text-primary mb-1 leading-tight">
+                        {job.title}
+                      </h3>
+                      <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium border ${cfg.bg} ${cfg.text} ${cfg.border}`}>
+                        {job.status.charAt(0).toUpperCase() + job.status.slice(1)}
+                      </span>
+                    </div>
+
+                    {/* Kebab Menu */}
+                    <div className="relative">
                       <button
-                        onClick={() => handleStatusChange(job, "active")}
-                        className="px-3.5 py-1.5 text-[11px] text-status-live border border-status-live/40 rounded-radius-input hover:bg-status-live/10 transition-colors ml-auto"
+                        onClick={() => setOpenMenuId(isMenuOpen ? null : job.id)}
+                        className="p-2 rounded-lg hover:bg-surface-hover text-gray-400 hover:text-text-primary transition-colors"
                       >
-                        Publish
+                        <MoreVertical size={18} />
                       </button>
+
+                      {isMenuOpen && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-10"
+                            onClick={() => setOpenMenuId(null)}
+                          />
+                          <div className="absolute right-0 top-10 w-48 bg-surface-default border border-border-default rounded-lg shadow-xl z-20 py-1">
+                            <button
+                              onClick={() => { setEditingJob(job); setOpenMenuId(null); }}
+                              className="w-full flex items-center gap-3 px-4 py-2 text-sm text-text-primary hover:bg-surface-hover transition-colors"
+                            >
+                              <Edit2 size={16} className="text-gray-400" />
+                              Edit Job
+                            </button>
+                            {job.status === "draft" && (
+                              <button
+                                onClick={() => { handleStatusChange(job, "active"); setOpenMenuId(null); }}
+                                className="w-full flex items-center gap-3 px-4 py-2 text-sm text-green-600 hover:bg-green-50 transition-colors"
+                              >
+                                <Send size={16} />
+                                Publish
+                              </button>
+                            )}
+                            {job.status === "active" && (
+                              <button
+                                onClick={() => { handleStatusChange(job, "closed"); setOpenMenuId(null); }}
+                                className="w-full flex items-center gap-3 px-4 py-2 text-sm text-orange-600 hover:bg-orange-50 transition-colors"
+                              >
+                                <XCircle size={16} />
+                                Close Job
+                              </button>
+                            )}
+                            {(job.status === "draft" || job.status === "closed") && (
+                              <button
+                                onClick={() => { handleDelete(job); setOpenMenuId(null); }}
+                                className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors border-t border-border-default"
+                              >
+                                <Trash2 size={16} />
+                                Delete
+                              </button>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Metadata */}
+                  <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm text-gray-400 mb-5">
+                    {job.department && (
+                      <div className="flex items-center gap-1.5">
+                        <Building2 size={16} className="text-gray-400" />
+                        <span>{job.department}</span>
+                      </div>
                     )}
-                    {job.status === "active" && (
-                      <button
-                        onClick={() => handleStatusChange(job, "closed")}
-                        className="px-3.5 py-1.5 text-[11px] text-text-muted border border-border-default rounded-radius-input hover:text-status-alert transition-colors ml-auto"
-                      >
-                        Close
-                      </button>
+                    {job.location && (
+                      <div className="flex items-center gap-1.5">
+                        <MapPin size={16} className="text-gray-400" />
+                        <span>{job.location}</span>
+                      </div>
                     )}
-                    {(job.status === "draft" || job.status === "closed") && (
-                      <button
-                        onClick={() => handleDelete(job)}
-                        className="px-3.5 py-1.5 text-[11px] text-status-alert border border-status-alert/40 rounded-radius-input hover:bg-status-alert/10 transition-colors"
-                      >
-                        Delete
-                      </button>
+                    <div className="flex items-center gap-1.5">
+                      <Users size={16} className="text-gray-400" />
+                      <span>{job.applicant_count} Applicant{job.applicant_count !== 1 ? "s" : ""}</span>
+                    </div>
+                    {deadline && (
+                      <div className="flex items-center gap-1.5">
+                        <Calendar size={16} className="text-gray-400" />
+                        <span>{deadline}</span>
+                      </div>
                     )}
                   </div>
+
+                  {/* Primary Action */}
+                  <button
+                    onClick={() => setViewingJob(job)}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-accent-gold text-bg-primary rounded-lg font-medium text-sm hover:brightness-110 transition-all"
+                  >
+                    <Eye size={16} />
+                    View Details
+                  </button>
                 </div>
               );
             })}

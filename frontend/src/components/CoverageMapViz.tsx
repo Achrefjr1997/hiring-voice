@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle, Circle } from "lucide-react";
+import { AlertTriangle, CheckCircle, Circle, Target } from "lucide-react";
 import type { CoverageMapState } from "../types";
 
 const STATUS_STYLES: Record<string, string> = {
@@ -63,33 +63,42 @@ export default function CoverageMapViz({
                 return (
                   <div
                     key={id}
-                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-radius-card border text-caption transition-colors ${STATUS_STYLES[cell.status] ?? "bg-surface-raised"}`}
+                    className={`flex flex-col gap-2 px-3 py-2.5 rounded-lg border transition-all hover:shadow-sm ${STATUS_STYLES[cell.status] ?? "bg-surface-raised"}`}
+                    title={cell.name}
                   >
-                    <Icon size={14} className={`shrink-0 ${statusColor}`} />
-                    <span className="flex-1 font-medium text-text-primary truncate">
-                      {cell.name}
-                    </span>
-                    {cell.classification === "MUST_HAVE" && (
-                      <span className="text-[9px] font-semibold text-accent-gold bg-accent-gold/10 px-1.5 py-0.5 rounded-radius-card shrink-0">
-                        M
+                    {/* Header row with icon and name */}
+                    <div className="flex items-center gap-2">
+                      <Icon size={16} className={`shrink-0 ${statusColor}`} />
+                      <span className="flex-1 font-medium text-sm text-text-primary truncate">
+                        {cell.name}
                       </span>
-                    )}
-                    <div className="w-14 h-1.5 bg-surface-raised rounded-full overflow-hidden shrink-0">
-                      <div
-                        className={`h-full rounded-full transition-all duration-500 ${
-                          cell.status === "COVERED" ? "bg-status-live"
-                            : cell.status === "WEAK" ? "bg-status-warning"
-                              : "bg-border-default"
-                        }`}
-                        style={{ width: `${confidencePct}%` }}
-                      />
+                      {cell.classification === "MUST_HAVE" && (
+                        <div className="flex items-center gap-1 shrink-0 px-2 py-0.5 rounded-md bg-amber-100 border border-amber-300">
+                          <Target size={12} className="text-amber-700" />
+                          <span className="text-xs font-semibold text-amber-700">Required</span>
+                        </div>
+                      )}
+                      {cell.integrityFlagged && (
+                        <AlertTriangle size={14} className="text-status-alert shrink-0" />
+                      )}
                     </div>
-                    <span className="text-[10px] font-mono text-text-muted w-6 text-right shrink-0">
-                      {confidencePct}%
-                    </span>
-                    {cell.integrityFlagged && (
-                      <AlertTriangle size={12} className="text-status-alert shrink-0" />
-                    )}
+
+                    {/* Progress bar row */}
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ${
+                            cell.status === "COVERED" ? "bg-green-500"
+                              : cell.status === "WEAK" ? "bg-yellow-500"
+                                : "bg-gray-300"
+                          }`}
+                          style={{ width: `${confidencePct}%` }}
+                        />
+                      </div>
+                      <span className="text-xs font-semibold text-gray-700 w-10 text-right shrink-0">
+                        {confidencePct}%
+                      </span>
+                    </div>
                   </div>
                 );
               })}

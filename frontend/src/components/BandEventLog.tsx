@@ -1,14 +1,25 @@
 import type { ParsedVoiceHireEvent } from "../types";
-import { Wifi, WifiOff } from "lucide-react";
+import { Wifi, WifiOff, Brain, Users, Shield, Mic, Gavel, FileText } from "lucide-react";
 import { useState } from "react";
 
-const SENDER_COLORS: Record<string, string> = {
-  "@session-brain": "text-accent-gold border-l-accent-gold",
-  "@evidence-chain": "text-status-info border-l-status-info",
-  "@integrity-skeptic": "text-status-alert border-l-status-alert",
-  "@voice-persona": "text-status-live border-l-status-live",
-  "@hiring-committee": "text-accent-gold border-l-accent-gold",
-  "@rubric-synthesizer": "text-status-info border-l-status-info",
+const SENDER_CONFIG: Record<string, { icon: typeof Brain; color: string; bg: string; label: string }> = {
+  "@session-brain": { icon: Brain, color: "text-yellow-600", bg: "bg-yellow-100", label: "Session Brain" },
+  "@evidence-chain": { icon: Users, color: "text-blue-600", bg: "bg-blue-100", label: "Evidence Chain" },
+  "@integrity-skeptic": { icon: Shield, color: "text-red-600", bg: "bg-red-100", label: "Integrity Skeptic" },
+  "@voice-persona": { icon: Mic, color: "text-green-600", bg: "bg-green-100", label: "Voice Persona" },
+  "@hiring-committee": { icon: Gavel, color: "text-purple-600", bg: "bg-purple-100", label: "Committee" },
+  "@rubric-synthesizer": { icon: FileText, color: "text-blue-600", bg: "bg-blue-100", label: "Rubric Synthesizer" },
+};
+
+const EVENT_TYPE_LABELS: Record<string, string> = {
+  COMPETENCY_GRAPH_READY: "Competency Graph",
+  PROBE_GENERATED: "Probe Generated",
+  SPEAK: "Voice Output",
+  CANDIDATE_UTTERANCE: "Candidate Response",
+  EVIDENCE: "Evidence Extracted",
+  INTEGRITY_CHALLENGE: "Integrity Alert",
+  DELIBERATION: "Deliberation",
+  COVERAGE_MAP_UPDATE: "Map Updated",
 };
 
 export default function BandEventLog({
@@ -28,67 +39,73 @@ export default function BandEventLog({
 
   return (
     <div className="flex flex-col">
-      {/* Header */}
-      <div className="flex items-center gap-2 px-4 py-2 border-b border-border-default">
-        <h2 className="text-caption font-medium text-text-secondary uppercase tracking-wide flex-1">Event Log</h2>
-        {connected
-          ? <><Wifi size={12} className="text-status-live" /><span className="text-caption text-status-live">Live</span></>
-          : <><WifiOff size={12} className="text-status-alert" /><span className="text-caption text-status-alert">Reconnecting</span></>
-        }
-      </div>
-
-      {/* Event list */}
-      <div className="flex flex-col">
+      {/* Event timeline */}
+      <div className="flex flex-col px-3 py-2">
         {events.length === 0 ? (
-          <p className="text-caption text-text-muted italic px-4 py-6 text-center">No events yet.</p>
+          <p className="text-xs text-gray-400 italic py-6 text-center">No events yet.</p>
         ) : (
-          events.map((ev) => {
-            const borderColor = SENDER_COLORS[ev.sender] ?? "border-l-border-default";
+          events.map((ev, index) => {
+            const config = SENDER_CONFIG[ev.sender] ?? { icon: FileText, color: "text-gray-600", bg: "bg-gray-100", label: ev.sender };
+            const Icon = config.icon;
             const isOpen = expanded.has(ev.bandMessageId);
             const hasDetail = ev.type === "INTEGRITY_CHALLENGE" || ev.type === "PROBE_GENERATED" || ev.type === "SPEAK";
             const payload = ev.payload as Record<string, unknown>;
             const isFiller = ev.type === "SPEAK" && (payload as { isFiller?: boolean })?.isFiller === true;
+            const eventLabel = EVENT_TYPE_LABELS[ev.type] ?? ev.type;
 
             return (
               <div
                 key={ev.bandMessageId}
-                className={`px-3 py-2 text-caption border-l-2 ${borderColor} hover:bg-surface-hover transition-colors event-enter ${isFiller ? "opacity-60" : ""} ${hasDetail ? "cursor-pointer" : ""}`}
-                onClick={() => hasDetail && toggle(ev.bandMessageId)}
+                className={`flex gap-3 pb-3 ${index !== events.length - 1 ? "border-l-2 border-gray-200 ml-4" : ""} ${isFiller ? "opacity-60" : ""} event-enter`}
               >
-                <div className="flex items-start gap-2">
-                  <span className="font-medium shrink-0 text-text-primary">{ev.sender}</span>
-                  <span className="flex-1 truncate text-text-muted">{ev.type}</span>
-                  <span className="text-text-muted font-mono text-caption shrink-0">
-                    {new Date(ev.timestamp).toLocaleTimeString()}
-                  </span>
+                {/* Icon */}
+                <div className={`w-8 h-8 rounded-lg ${config.bg} flex items-center justify-center shrink-0 -ml-[18px] ${index === events.length - 1 ? "" : ""}`}>
+                  <Icon size={16} className={config.color} />
                 </div>
 
-                {ev.type === "PROBE_GENERATED" && (
-                  <div className="mt-1 truncate text-text-secondary">{(payload?.probeText as string)?.slice(0, 80)}…</div>
-                )}
-                {ev.type === "SPEAK" && (
-                  <div className="mt-1 truncate text-text-secondary">
-                    {(payload as { text?: string })?.text?.slice(0, 80)}
-                    {isFiller && <span className="text-accent-gold ml-1">⏳ thinking…</span>}
+                {/* Content */}
+                <div
+                  className={`flex-1 bg-surface-raised border border-border-default rounded-lg p-2.5 ${hasDetail ? "cursor-pointer hover:border-accent-gold/50 transition-colors" : ""}`}
+                  onClick={() => hasDetail && toggle(ev.bandMessageId)}
+                >
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-gray-700">{config.label}</span>
+                      <span className="text-xs text-gray-500">•</span>
+                      <span className="text-xs text-gray-600">{eventLabel}</span>
+                    </div>
+                    <span className="text-xs font-mono text-gray-400">
+                      {new Date(ev.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
                   </div>
-                )}
-                {ev.type === "INTEGRITY_CHALLENGE" && (
-                  <div className="mt-1 truncate text-status-alert">
-                    {typeof ev.payload === "string" ? (ev.payload as string).slice(0, 80) : (payload?.challengeReason as string)}
-                  </div>
-                )}
 
-                {isOpen && ev.type === "INTEGRITY_CHALLENGE" && (
-                  <div className="mt-2 p-2 bg-surface-raised rounded-radius-card border border-border-default text-caption text-text-secondary whitespace-pre-wrap max-h-40 overflow-y-auto font-mono">
-                    {typeof ev.payload === "string" ? ev.payload : (payload?.thinkingTrace as string)}
-                  </div>
-                )}
-                {isOpen && ev.type === "PROBE_GENERATED" && (
-                  <div className="mt-2 text-accent-gold">{payload?.probeText as string}</div>
-                )}
-                {isOpen && ev.type === "SPEAK" && (
-                  <div className="mt-2 text-text-primary">{(payload as { text?: string })?.text}</div>
-                )}
+                  {ev.type === "PROBE_GENERATED" && !isOpen && (
+                    <div className="text-xs text-gray-600 line-clamp-2">{(payload?.probeText as string)}</div>
+                  )}
+                  {ev.type === "SPEAK" && !isOpen && (
+                    <div className="text-xs text-gray-600 line-clamp-2">
+                      {(payload as { text?: string })?.text}
+                      {isFiller && <span className="text-yellow-600 ml-1">⏳ thinking…</span>}
+                    </div>
+                  )}
+                  {ev.type === "INTEGRITY_CHALLENGE" && !isOpen && (
+                    <div className="text-xs text-red-600 line-clamp-2">
+                      {typeof ev.payload === "string" ? (ev.payload as string) : (payload?.challengeReason as string)}
+                    </div>
+                  )}
+
+                  {isOpen && ev.type === "INTEGRITY_CHALLENGE" && (
+                    <div className="mt-2 p-2 bg-surface-default rounded-md border border-border-default text-xs text-gray-600 whitespace-pre-wrap max-h-40 overflow-y-auto font-mono">
+                      {typeof ev.payload === "string" ? ev.payload : (payload?.thinkingTrace as string)}
+                    </div>
+                  )}
+                  {isOpen && ev.type === "PROBE_GENERATED" && (
+                    <div className="mt-2 text-xs text-yellow-700">{payload?.probeText as string}</div>
+                  )}
+                  {isOpen && ev.type === "SPEAK" && (
+                    <div className="mt-2 text-xs text-gray-700">{(payload as { text?: string })?.text}</div>
+                  )}
+                </div>
               </div>
             );
           })

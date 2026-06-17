@@ -149,50 +149,54 @@ export default function RecruiterDashboard() {
             {view === "live" && (
               <>
                 {/* Status bar */}
-                <div className="flex items-center gap-4 px-6 py-2.5 border-b border-border-default bg-surface-default shrink-0">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-status-live live-pulse" />
-                    <span className="text-caption font-medium text-status-live">
+                <div className="flex items-center gap-5 px-6 py-3.5 border-b border-border-default bg-gradient-to-r from-surface-default to-surface-raised shrink-0">
+                  {/* LIVE Indicator - More Prominent */}
+                  <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg bg-green-50 border border-green-200">
+                    <span className="w-2.5 h-2.5 rounded-full bg-green-500 live-pulse" />
+                    <span className="text-sm font-bold text-green-700 uppercase tracking-wide">
                       {state.connected ? "LIVE" : "RECONNECTING"}
                     </span>
-                    {!state.connected && <WifiOff size={12} className="text-status-alert" />}
+                    {!state.connected && <WifiOff size={16} className="text-status-alert" />}
                   </div>
 
+                  {/* Candidate Name */}
                   {state.candidateName && (
                     <>
-                      <span className="text-text-primary text-body font-medium">{state.candidateName}</span>
-                      <span className="text-text-muted text-caption hidden sm:inline">
-                        · {covered}/{total} competencies · {state.integrityViolations.length} violations
+                      <span className="text-text-primary text-base font-semibold">{state.candidateName}</span>
+                      <span className="text-text-muted text-sm hidden sm:inline">
+                        • {covered}/{total} competencies • {state.integrityViolations.length} violations
                       </span>
                     </>
                   )}
 
-                  <div className="ml-auto flex items-center gap-3 text-caption text-text-muted">
+                  {/* Timer and Connection Status - More Prominent */}
+                  <div className="ml-auto flex items-center gap-4">
                     {state.isSessionReady && (
-                      <span className="flex items-center gap-1">
-                        <Clock size={12} />
-                        {(() => {
-                          const elapsed = state.isSessionReady && state.events.length > 0
-                            ? Math.floor((Date.now() - new Date(state.events[state.events.length - 1]?.timestamp || Date.now()).getTime()) / 1000)
-                            : 0;
-                          return `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, "0")}`;
-                        })()}
-                      </span>
+                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-hover">
+                        <Clock size={16} className="text-accent-gold" />
+                        <span className="text-base font-mono font-semibold text-text-primary">
+                          {(() => {
+                            const elapsed = state.isSessionReady && state.events.length > 0
+                              ? Math.floor((Date.now() - new Date(state.events[state.events.length - 1]?.timestamp || Date.now()).getTime()) / 1000)
+                              : 0;
+                            return `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, "0")}`;
+                          })()}
+                        </span>
+                      </div>
                     )}
-                    <span className="flex items-center gap-1">
-                      {state.connected
-                        ? <><Wifi size={12} className="text-status-live" /><span>Live</span></>
-                        : <><WifiOff size={12} className="text-status-alert" /><span>Disconnected</span></>
-                      }
-                    </span>
                   </div>
                 </div>
 
-                {/* Demo mode banner */}
+                {/* Demo mode banner - More Distinct */}
                 {state.demoMode && (
-                  <div className="mx-6 mt-3 rounded-radius-card bg-accent-gold/10 border border-accent-gold/30 px-4 py-2 text-caption text-accent-gold flex items-center gap-2 shrink-0">
-                    <span className="font-semibold">DEMO MODE</span>
-                    <span className="text-text-muted">Violations are logged only. No auto-action.</span>
+                  <div className="mx-6 mt-3 rounded-lg bg-gradient-to-r from-yellow-50 to-orange-50 border-2 border-yellow-300 px-4 py-2.5 flex items-center gap-3 shrink-0 shadow-sm">
+                    <svg className="w-5 h-5 text-yellow-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <div className="flex-1">
+                      <span className="text-sm font-bold text-yellow-800">DEMO MODE</span>
+                      <span className="text-xs text-yellow-700 ml-2">Violations are logged only. No auto-action.</span>
+                    </div>
                   </div>
                 )}
 
@@ -285,9 +289,14 @@ export default function RecruiterDashboard() {
                         {sidePanels.integrity ? <ChevronUp size={14} className="text-text-muted" /> : <ChevronDown size={14} className="text-text-muted" />}
                       </button>
                       {sidePanels.integrity && (
-                        <div className="px-4 py-3 text-caption text-text-muted">
+                        <div className="px-4 py-3">
                           {state.integrityViolations.length === 0 ? (
-                            <p>No violations detected.</p>
+                            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-green-50 border border-green-200">
+                              <svg className="w-5 h-5 text-green-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                              </svg>
+                              <span className="text-xs font-medium text-green-700">No violations detected</span>
+                            </div>
                           ) : (
                             <div className="space-y-1.5 max-h-48 overflow-y-auto">
                               {[...state.integrityViolations].reverse().map((v: any, i: number) => (

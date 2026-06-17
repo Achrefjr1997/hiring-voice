@@ -30,6 +30,7 @@ from voicehire.db.operations import (
     db_update_candidate_name, db_create_candidate, db_list_candidates,
     db_create_job, db_list_jobs, db_get_job, db_update_job, db_delete_job, db_update_job_status,
     db_get_stats, db_get_trends, db_save_candidate_matches, db_get_cached_matches, db_get_candidates_with_performance,
+    db_create_google_user, db_update_user_google,
 )
 from voicehire.api.auth import create_token, decode_token, hash_password, verify_password
 from voicehire.email.sender import send_invite_email
@@ -38,7 +39,12 @@ from voicehire.services.resume_parser import ResumeParser
 from voicehire.services.job_ai_generator import JobDescriptionGenerator
 from voicehire.services.candidate_matcher import CandidateMatcher
 from voicehire.schemas.job import JobCreate, JobUpdate, JobStatusUpdate, GenerateDescriptionRequest
-from config import BAND_API_BASE, BAND_API_KEY, TTS_FORMAT, AIMLAPI_KEY, AIMLAPI_BASE_URL
+from config import BAND_API_BASE, BAND_API_KEY, TTS_FORMAT, AIMLAPI_KEY, AIMLAPI_BASE_URL, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI, FRONTEND_URL
+from authlib.integrations.starlette_client import OAuth
+from starlette.requests import Request
+from starlette.responses import RedirectResponse
+from starlette.middleware.sessions import SessionMiddleware
+import secrets
 
 security = HTTPBearer(auto_error=False)
 
@@ -77,6 +83,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Add SessionMiddleware for OAuth state management
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=os.environ.get("JWT_SECRET", secrets.token_urlsafe(32)),
+)
+
 AUDIO_DIR = os.path.join(os.path.dirname(__file__), "..", "audio_output")
 # Docker bind mount at /app/audio_output takes priority (persists across rebuilds)
 if os.path.isdir("/app/audio_output"):
@@ -92,6 +104,16 @@ brain: SessionBrain | None = None
 resume_parser = ResumeParser(AIMLAPI_KEY, AIMLAPI_BASE_URL)
 job_generator = JobDescriptionGenerator(AIMLAPI_KEY, AIMLAPI_BASE_URL)
 candidate_matcher = CandidateMatcher(AIMLAPI_KEY, AIMLAPI_BASE_URL)
+
+# Google OAuth client
+oauth = OAuth()
+oauth.register(
+    name="google",
+    client_id=GOOGLE_CLIENT_ID,
+    client_secret=GOOGLE_CLIENT_SECRET,
+    server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+    client_kwargs={"scope": "openid email profile"},
+)
 
 # Frontend WebSocket relay: session_id -> set[WebSocket]
 frontend_ws: dict[str, set[WebSocket]] = {}
@@ -256,6 +278,48 @@ async def login(email: str = Form(...), password: str = Form(...)):
         raise HTTPException(401, "Invalid email or password")
     token = create_token(user.id, user.email)
     return {"token": token, "recruiter_id": user.id, "email": user.email}
+
+
+@app.get("/auth/google/login")
+async def google_login(request: Request):
+    """Redirect user to Google consent screen."""
+    return await oauth.google.authorize_redirect(request, GOOGLE_REDIRECT_URI)
+
+
+@app.get("/auth/google/callback")
+async def google_callback(request: Request):
+    """
+    Exchange auth code for user info.
+    Auto-provision new users or log in existing users.
+    Redirect to frontend with JWT token.
+    """
+    try:
+        token = await oauth.google.authorize_access_token(request)
+        userinfo = token["userinfo"]
+
+        email = userinfo["email"]
+        full_name = userinfo.get("name", "")
+        avatar_url = userinfo.get("picture", "")
+
+        # Check if user exists
+        user = await db_get_user_by_email(email)
+
+        if user:
+            # Existing user - update Google profile info
+            await db_update_user_google(user.id, full_name, avatar_url)
+            jwt_token = create_token(user.id, user.email)
+        else:
+            # New user - auto-provision
+            random_password = secrets.token_urlsafe(32)
+            hashed = hash_password(random_password)
+            user_id = await db_create_google_user(email, hashed, full_name, avatar_url)
+            jwt_token = create_token(user_id, email)
+
+        # Redirect to frontend with token
+        return RedirectResponse(url=f"{FRONTEND_URL}/login?token={jwt_token}")
+    except Exception as e:
+        print(f"[auth] Google OAuth callback error: {e}")
+        return RedirectResponse(url=f"{FRONTEND_URL}/login?error=oauth_failed")
 
 
 @app.get("/sessions")

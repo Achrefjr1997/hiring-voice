@@ -11,6 +11,10 @@ class User(Base):
     email = Column(String, unique=True, nullable=False, index=True)
     hashed_password = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    auth_provider = Column(String(20), default="email", nullable=False)
+    email_verified = Column(Boolean, default=False, nullable=False)
+    avatar_url = Column(String(500), nullable=True)
+    full_name = Column(String(200), nullable=True)
 
 
 class Session(Base):

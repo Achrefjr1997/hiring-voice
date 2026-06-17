@@ -1,5 +1,7 @@
 import { useAuth } from "./AuthProvider";
 import { useNavigate } from "react-router-dom";
+import { History, Users, Briefcase, BarChart3 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 type SidebarView = "interviews" | "candidates" | "recruitments" | "analytics";
 
@@ -8,11 +10,11 @@ interface Props {
   onViewChange: (view: SidebarView) => void;
 }
 
-const NAV_ITEMS: { id: SidebarView; label: string; icon: string }[] = [
-  { id: "interviews", label: "Recent Interviews", icon: "🎙️" },
-  { id: "candidates", label: "Candidates & CVs", icon: "👥" },
-  { id: "recruitments", label: "Active Recruitments", icon: "💼" },
-  { id: "analytics", label: "Analytics", icon: "📊" },
+const NAV_ITEMS: { id: SidebarView; label: string; icon: LucideIcon }[] = [
+  { id: "interviews", label: "Recent Interviews", icon: History },
+  { id: "candidates", label: "Candidates & CVs", icon: Users },
+  { id: "recruitments", label: "Active Recruitments", icon: Briefcase },
+  { id: "analytics", label: "Analytics", icon: BarChart3 },
 ];
 
 export default function RecruiterSidebar({ activeView, onViewChange }: Props) {
@@ -32,21 +34,29 @@ export default function RecruiterSidebar({ activeView, onViewChange }: Props) {
   return (
     <aside className="w-[250px] min-w-[250px] bg-[#0A0A0A] border-r border-border-default flex flex-col h-full">
       <nav className="flex-1 py-4 pt-6">
-        {NAV_ITEMS.map((item) => (
-          <button
-            key={item.id}
-            onClick={() => onViewChange(item.id)}
-            className={
-              "w-full flex items-center gap-3 px-6 py-3 text-caption transition-all duration-150 border-l-2 text-left " +
-              (activeView === item.id
-                ? "text-accent-gold border-l-accent-gold bg-accent-gold/[0.05]"
-                : "text-text-muted border-l-transparent hover:text-text-primary hover:bg-white/[0.02]")
-            }
-          >
-            <span className="text-[16px]" aria-hidden>{item.icon}</span>
-            {item.label}
-          </button>
-        ))}
+        {NAV_ITEMS.map((item) => {
+          const Icon = item.icon;
+          const isActive = activeView === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => onViewChange(item.id)}
+              className={
+                "w-full flex items-center gap-3 px-6 py-3 text-sm transition-all duration-150 border-l-2 text-left " +
+                (isActive
+                  ? "text-accent-gold border-l-accent-gold bg-accent-gold/[0.05] font-medium"
+                  : "text-gray-300 border-l-transparent hover:text-white hover:bg-white/[0.02]")
+              }
+            >
+              <Icon
+                className={isActive ? "text-accent-gold" : "text-gray-400"}
+                size={18}
+                strokeWidth={2}
+              />
+              {item.label}
+            </button>
+          );
+        })}
       </nav>
 
       <div className="px-6 py-4 border-t border-border-default">
@@ -64,7 +74,7 @@ export default function RecruiterSidebar({ activeView, onViewChange }: Props) {
           </div>
           <button
             onClick={() => { logout(); navigate("/login"); }}
-            className="text-[11px] text-text-muted hover:text-status-alert transition-colors px-2 py-1 rounded-radius-input hover:bg-status-alert/10 shrink-0"
+            className="text-xs text-gray-400 hover:text-status-alert transition-colors px-3 py-1.5 rounded-lg hover:bg-status-alert/10 shrink-0 font-medium"
           >
             Sign out
           </button>

@@ -158,10 +158,12 @@ export default function VoiceInterface({ events, onAudioReady, sessionStatus, cu
         </div>
 
         {transcript.length === 0 && sessionStatus === "active" && (
-          <div className="bg-surface-default rounded-radius-card border border-border-cream p-6 text-center shadow-sm event-enter">
-            <Bot size={36} className="text-accent-gold mx-auto mb-3" />
-            <h3 className="text-[17px] font-semibold text-text-inverted mb-1">Welcome to your VoiceHire interview</h3>
-            <p className="text-[15px] text-text-muted leading-relaxed">
+          <div className="bg-white rounded-xl border-2 border-gray-200 p-8 text-center shadow-lg event-enter max-w-lg">
+            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-yellow-50 to-orange-50 flex items-center justify-center mx-auto mb-4">
+              <Bot size={32} className="text-accent-gold" />
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-3 font-serif">Welcome to your VoiceHire interview</h3>
+            <p className="text-base text-gray-600 leading-relaxed">
               Speak clearly and take your time. You can pause anytime. Click the microphone below when you're ready.
             </p>
           </div>

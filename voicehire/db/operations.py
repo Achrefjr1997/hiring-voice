@@ -678,3 +678,53 @@ async def db_get_candidates_with_performance() -> list[dict]:
     except Exception as e:
         print(f"[db] Failed to get candidates with performance: {e}")
         return []
+
+
+async def db_create_google_user(
+    email: str,
+    hashed_password: str,
+    full_name: str = "",
+    avatar_url: str = ""
+) -> str:
+    """
+    Create new user from Google OAuth.
+    Sets auth_provider='google' and email_verified=True.
+    Returns user_id.
+    """
+    try:
+        async with async_session() as session:
+            user = UserModel(
+                email=email,
+                hashed_password=hashed_password,
+                auth_provider="google",
+                email_verified=True,
+                full_name=full_name,
+                avatar_url=avatar_url,
+            )
+            session.add(user)
+            await session.commit()
+            return user.id
+    except Exception as e:
+        print(f"[db] Failed to create Google user {email}: {e}")
+        raise
+
+
+async def db_update_user_google(
+    user_id: str,
+    full_name: str,
+    avatar_url: str
+) -> None:
+    """
+    Update Google profile fields for existing user.
+    Called when existing email/password user signs in via Google.
+    """
+    try:
+        async with async_session() as session:
+            await session.execute(
+                update(UserModel)
+                .where(UserModel.id == user_id)
+                .values(full_name=full_name, avatar_url=avatar_url)
+            )
+            await session.commit()
+    except Exception as e:
+        print(f"[db] Failed to update Google profile for user {user_id}: {e}")

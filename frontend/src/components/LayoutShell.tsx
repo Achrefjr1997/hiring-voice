@@ -1,6 +1,7 @@
 import { useNavigate, useLocation } from "react-router-dom";
 import { SidebarProvider, useSidebar } from "./SidebarContext";
 import RecruiterSidebar from "./RecruiterSidebar";
+import { Logo } from "./ui/Logo";
 
 function LayoutContent({ children }: { children: React.ReactNode }) {
   const { activeView, setActiveView } = useSidebar();
@@ -30,12 +31,15 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
       <div className="h-screen bg-bg-primary flex flex-col">
         {/* Thin top bar with brand */}
         <header className="h-12 border-b border-border-default flex items-center px-6 shrink-0">
-          <span className="font-heading text-h3 text-accent-gold tracking-wide">
-            VoiceHire
-          </span>
-          <span className="ml-3 text-caption text-text-muted border-l border-border-default pl-3 leading-none">
-            recruiter
-          </span>
+          <div className="flex items-center gap-3">
+            <Logo size="xs" className="w-7 h-7" />
+            <span className="font-heading text-h3 text-accent-gold tracking-wide">
+              VoiceHire
+            </span>
+            <span className="text-caption text-text-muted border-l border-border-default pl-3 ml-3 leading-none">
+              recruiter
+            </span>
+          </div>
         </header>
 
         {/* Sidebar + content row */}

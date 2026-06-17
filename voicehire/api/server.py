@@ -27,11 +27,17 @@ from voicehire.db.database import init_db
 from voicehire.db.operations import (
     db_create_session, db_insert_event, db_end_session, ROOM_TO_SESSION,
     db_create_user, db_get_user_by_email, db_get_sessions_by_recruiter, db_get_session_history,
-    db_update_candidate_name,
+    db_update_candidate_name, db_create_candidate, db_list_candidates,
+    db_create_job, db_list_jobs, db_get_job, db_update_job, db_delete_job, db_update_job_status,
+    db_get_stats, db_get_trends,
 )
 from voicehire.api.auth import create_token, decode_token, hash_password, verify_password
 from voicehire.email.sender import send_invite_email
-from config import BAND_API_BASE, BAND_API_KEY, TTS_FORMAT
+from voicehire.services.file_extractor import extract_text
+from voicehire.services.resume_parser import ResumeParser
+from voicehire.services.job_ai_generator import JobDescriptionGenerator
+from voicehire.schemas.job import JobCreate, JobUpdate, JobStatusUpdate, GenerateDescriptionRequest
+from config import BAND_API_BASE, BAND_API_KEY, TTS_FORMAT, AIMLAPI_KEY, AIMLAPI_BASE_URL
 
 security = HTTPBearer(auto_error=False)
 
@@ -82,6 +88,8 @@ factory = BandSessionFactory()
 registry = AgentRegistry()
 listener = BandEventListener(registry)
 brain: SessionBrain | None = None
+resume_parser = ResumeParser(AIMLAPI_KEY, AIMLAPI_BASE_URL)
+job_generator = JobDescriptionGenerator(AIMLAPI_KEY, AIMLAPI_BASE_URL)
 
 # Frontend WebSocket relay: session_id -> set[WebSocket]
 frontend_ws: dict[str, set[WebSocket]] = {}
@@ -249,9 +257,15 @@ async def login(email: str = Form(...), password: str = Form(...)):
 
 
 @app.get("/sessions")
-async def list_sessions(recruiter_id: str = Depends(require_user)):
-    sessions = await db_get_sessions_by_recruiter(recruiter_id)
-    return sessions
+async def list_sessions(
+    recruiter_id: str = Depends(require_user),
+    start_date: str | None = None,
+    end_date: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+):
+    result = await db_get_sessions_by_recruiter(recruiter_id, start_date, end_date, limit, offset)
+    return result
 
 
 @app.get("/session/{id}/history")
@@ -294,6 +308,7 @@ async def create_session(
     grace_period: int = Form(default=1),
     demo_mode: bool = Form(default=True),
     candidate_email: str = Form(default=""),
+    job_id: str = Form(default=""),
 ):
     session_id = uuid.uuid4().hex[:8]
     band_session = await asyncio.to_thread(factory.create_session, session_id)
@@ -353,6 +368,7 @@ async def create_session(
             demo_mode=demo_mode,
             recruiter_id=recruiter_id,
             candidate_email=candidate_email or None,
+            job_id=job_id or None,
         )
     except Exception as e:
         print(f"[server] CRITICAL: Failed to create session {session_id}: {e}")
@@ -434,6 +450,179 @@ async def end_session(session_id: str):
         print(f"[server] CRITICAL: Failed to end session {session_id}: {e}")
 
     return {"status": "ok"}
+
+
+@app.post("/candidate/upload")
+async def upload_candidate(
+    recruiter_id: str = Depends(require_user),
+    file: UploadFile = File(...),
+):
+    if file.content_type not in ("application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"):
+        return {"error": "Only PDF and DOCX files are supported."}
+
+    import tempfile
+    import os as _os
+
+    suffix = ".pdf" if "pdf" in (file.content_type or "") else ".docx"
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    try:
+        blob = await file.read()
+        tmp.write(blob)
+        tmp.close()
+
+        text = extract_text(tmp.name)
+        if not text.strip():
+            return {"error": "Could not extract any text from the file. The file may be empty or scanned (OCR not supported)."}
+
+        parsed = resume_parser.parse(text)
+        if "error" in parsed:
+            return {"error": f"AI parser failed: {parsed['error']}. Raw text saved but structure unavailable."}
+
+        candidate_data = {
+            **parsed,
+            "raw_resume_text": text,
+            "original_filename": file.filename or "upload",
+        }
+        candidate_id = await db_create_candidate(candidate_data)
+        return {"id": candidate_id, **parsed}
+    except ValueError as e:
+        return {"error": str(e)}
+    except Exception as e:
+        return {"error": f"Failed to process file: {str(e)}"}
+    finally:
+        if _os.path.exists(tmp.name):
+            _os.unlink(tmp.name)
+
+
+@app.get("/candidates")
+async def list_candidates(recruiter_id: str = Depends(require_user)):
+    return await db_list_candidates()
+
+
+# ────────────── JOB POSTINGS ──────────────
+
+@app.post("/jobs/generate-description")
+async def generate_job_description(
+    recruiter_id: str = Depends(require_user),
+    body: GenerateDescriptionRequest = None,
+):
+    if body is None:
+        return {"error": "Request body required"}
+    result = job_generator.generate(body.job_title, body.skills)
+    if "error" in result:
+        return {"error": result["error"]}
+    return result
+
+
+@app.get("/jobs")
+async def list_jobs(
+    recruiter_id: str = Depends(require_user),
+    status: str | None = None,
+    search: str | None = None,
+):
+    return await db_list_jobs(recruiter_id, status, search)
+
+
+@app.post("/jobs")
+async def create_job(
+    recruiter_id: str = Depends(require_user),
+    body: JobCreate = None,
+):
+    if body is None:
+        return {"error": "Request body required"}
+    job_id = await db_create_job(recruiter_id, body.model_dump())
+    return await db_get_job(job_id)
+
+
+@app.get("/jobs/{job_id}")
+async def get_job(
+    recruiter_id: str = Depends(require_user),
+    job_id: str = None,
+):
+    if job_id is None:
+        return {"error": "job_id required"}
+    job = await db_get_job(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    if job["recruiter_id"] != recruiter_id:
+        raise HTTPException(403, "Access denied")
+    return job
+
+
+@app.put("/jobs/{job_id}")
+async def update_job(
+    recruiter_id: str = Depends(require_user),
+    job_id: str = None,
+    body: JobUpdate = None,
+):
+    if job_id is None or body is None:
+        return {"error": "job_id and body required"}
+    job = await db_get_job(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    if job["recruiter_id"] != recruiter_id:
+        raise HTTPException(403, "Access denied")
+    data = {k: v for k, v in body.model_dump().items() if v is not None}
+    ok = await db_update_job(job_id, data)
+    if not ok:
+        return {"error": "Update failed"}
+    return await db_get_job(job_id)
+
+
+@app.delete("/jobs/{job_id}")
+async def delete_job(
+    recruiter_id: str = Depends(require_user),
+    job_id: str = None,
+):
+    if job_id is None:
+        return {"error": "job_id required"}
+    job = await db_get_job(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    if job["recruiter_id"] != recruiter_id:
+        raise HTTPException(403, "Access denied")
+    if job["status"] not in ("draft", "closed"):
+        return {"error": "Cannot delete an active job. Close it first."}
+    ok = await db_delete_job(job_id)
+    return {"ok": ok}
+
+
+@app.patch("/jobs/{job_id}/status")
+async def update_job_status(
+    recruiter_id: str = Depends(require_user),
+    job_id: str = None,
+    body: JobStatusUpdate = None,
+):
+    if job_id is None or body is None:
+        return {"error": "job_id and body required"}
+    job = await db_get_job(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    if job["recruiter_id"] != recruiter_id:
+        raise HTTPException(403, "Access denied")
+    ok = await db_update_job_status(job_id, body.status)
+    if not ok:
+        return {"error": "Status update failed"}
+    return await db_get_job(job_id)
+
+
+@app.get("/stats")
+async def get_stats(
+    recruiter_id: str = Depends(require_user),
+    start_date: str | None = None,
+    end_date: str | None = None,
+):
+    return await db_get_stats(recruiter_id, start_date, end_date)
+
+
+@app.get("/stats/trends")
+async def get_trends(
+    recruiter_id: str = Depends(require_user),
+    start_date: str | None = None,
+    end_date: str | None = None,
+    granularity: str = "day",
+):
+    return await db_get_trends(recruiter_id, start_date, end_date, granularity)
 
 
 @app.get("/session/{session_id}")

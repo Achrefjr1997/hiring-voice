@@ -11,6 +11,7 @@ import CoverageMapViz from "./CoverageMapViz";
 import EvidencePortfolio from "./EvidencePortfolio";
 import CandidatesCvsView from "./CandidatesCvsView";
 import ActiveRecruitmentsView from "./ActiveRecruitmentsView";
+import CreateJobModal from "./CreateJobModal";
 import AnalyticsView from "./AnalyticsView";
 import { Clock, Wifi, WifiOff, ChevronUp, ChevronDown, AlertTriangle } from "lucide-react";
 
@@ -19,10 +20,12 @@ type ViewMode = "history" | "setup" | "live";
 export default function RecruiterDashboard() {
   const { state, connect } = useBandSession();
   const { token } = useAuth();
-  const { activeView } = useSidebar();
+  const { activeView, prefillResume, navigateToView, setNavigateToView, setPrefillResume } = useSidebar();
   const navigate = useNavigate();
   const [view, setView] = useState<ViewMode>("history");
   const [loading, setLoading] = useState(false);
+  const [showCreateJob, setShowCreateJob] = useState(false);
+  const [jobListKey, setJobListKey] = useState(0);
   const [sessionLink, setSessionLink] = useState<string | null>(null);
   const [sessions, setSessions] = useState<any[]>([]);
   const [candidateEmail, setCandidateEmail] = useState<string | null>(null);
@@ -32,14 +35,27 @@ export default function RecruiterDashboard() {
     setSidePanels((s) => ({ ...s, [panel]: !s[panel] }));
 
   useEffect(() => {
+    if (navigateToView === "setup") {
+      setView("setup");
+      setNavigateToView(null);
+    }
+  }, [navigateToView, setNavigateToView]);
+
+  useEffect(() => {
+    if (view !== "setup" && prefillResume) {
+      setPrefillResume("");
+    }
+  }, [view]);
+
+  useEffect(() => {
     if (!token) return;
     fetch("/sessions", { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => r.json())
-      .then(setSessions)
+      .then((data) => setSessions(data.sessions || []))
       .catch(() => {});
   }, [token]);
 
-  const handleSessionCreate = async (jd: string, resume: string, rubric: string, duration: string, enforcementLevel: string, violationThreshold: number, gracePeriod: number, demoMode: boolean, ce?: string) => {
+  const handleSessionCreate = async (jd: string, resume: string, rubric: string, duration: string, enforcementLevel: string, violationThreshold: number, gracePeriod: number, demoMode: boolean, ce?: string, jobId?: string) => {
     setLoading(true);
     try {
       const headers: Record<string, string> = { "Content-Type": "application/x-www-form-urlencoded" };
@@ -52,6 +68,7 @@ export default function RecruiterDashboard() {
         demo_mode: demoMode ? "true" : "false",
       });
       if (ce) body.set("candidate_email", ce);
+      if (jobId) body.set("job_id", jobId);
       const res = await fetch("/session/create", {
         method: "POST", headers,
         body,
@@ -123,7 +140,7 @@ export default function RecruiterDashboard() {
                 </div>
                 <div className="flex-1 overflow-y-auto p-8">
                   <div className="max-w-2xl mx-auto">
-                    <SessionSetup onSubmit={handleSessionCreate} loading={loading} />
+                    <SessionSetup onSubmit={handleSessionCreate} loading={loading} prefillResume={prefillResume} />
                   </div>
                 </div>
               </>
@@ -299,14 +316,8 @@ export default function RecruiterDashboard() {
         {/* ────────── CANDIDATES & CVs VIEW ────────── */}
         {activeView === "candidates" && (
           <>
-            <div className="h-14 border-b border-border-default flex items-center justify-between px-8 shrink-0">
+            <div className="h-14 border-b border-border-default flex items-center px-8 shrink-0">
               <h1 className="text-body font-semibold text-text-primary">Candidate Database</h1>
-              <button
-                onClick={() => { /* opens modal inside CandidatesCvsView */ }}
-                className="bg-accent-gold text-bg-primary text-caption font-semibold px-5 py-2 rounded-radius-input hover:brightness-110 transition-all"
-              >
-                + Upload CV
-              </button>
             </div>
             <div className="flex-1 overflow-y-auto">
               <CandidatesCvsView />
@@ -319,12 +330,19 @@ export default function RecruiterDashboard() {
           <>
             <div className="h-14 border-b border-border-default flex items-center justify-between px-8 shrink-0">
               <h1 className="text-body font-semibold text-text-primary">Active Recruitments</h1>
-              <button className="bg-accent-gold text-bg-primary text-caption font-semibold px-5 py-2 rounded-radius-input hover:brightness-110 transition-all">
+              <button onClick={() => setShowCreateJob(true)} className="bg-accent-gold text-bg-primary text-caption font-semibold px-5 py-2 rounded-radius-input hover:brightness-110 transition-all">
                 + Create Job
               </button>
             </div>
-            <ActiveRecruitmentsView />
+            <ActiveRecruitmentsView key={jobListKey} />
           </>
+        )}
+
+        {showCreateJob && (
+          <CreateJobModal
+            onClose={() => setShowCreateJob(false)}
+            onCreated={() => { setShowCreateJob(false); setJobListKey((k) => k + 1); }}
+          />
         )}
 
         {/* ────────── ANALYTICS VIEW ────────── */}

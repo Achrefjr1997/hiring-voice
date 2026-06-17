@@ -1,4 +1,6 @@
 openai
+PyPDF2
+python-docx
 pipecat-ai
 langgraph
 langchain

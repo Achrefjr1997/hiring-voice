@@ -66,6 +66,19 @@ class JobPosting(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class CandidateJobMatch(Base):
+    __tablename__ = "candidate_job_matches"
+    job_id = Column(String, ForeignKey("job_postings.id"), primary_key=True)
+    candidate_id = Column(String, ForeignKey("candidates.id"), primary_key=True)
+    score = Column(Float, default=0)
+    rank = Column(Integer, default=0)
+    strengths = Column(JSON, default=list)
+    gaps = Column(JSON, default=list)
+    reasoning = Column(Text, default="")
+    model_used = Column(String, default="")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class Event(Base):
     __tablename__ = "events"
     id = Column(Integer, primary_key=True, autoincrement=True)

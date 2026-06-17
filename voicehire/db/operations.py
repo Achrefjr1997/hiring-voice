@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import update, select, func, delete as sa_delete, text
 from sqlalchemy.orm import selectinload
 from voicehire.db.database import async_session
-from voicehire.db.models import User as UserModel, Session as SessionModel, Event as EventModel, Candidate as CandidateModel, JobPosting as JobPostingModel
+from voicehire.db.models import User as UserModel, Session as SessionModel, Event as EventModel, Candidate as CandidateModel, JobPosting as JobPostingModel, CandidateJobMatch as CandidateJobMatchModel
 
 ROOM_TO_SESSION: dict[str, str] = {}
 
@@ -581,3 +581,100 @@ async def db_update_job_status(job_id: str, status: str) -> bool:
     except Exception as e:
         print(f"[db] Failed to update job status {job_id}: {e}")
         return False
+
+
+async def db_save_candidate_matches(job_id: str, matches: list[dict]) -> None:
+    try:
+        async with async_session() as session:
+            existing = await session.execute(
+                select(CandidateJobMatchModel).where(CandidateJobMatchModel.job_id == job_id)
+            )
+            for row in existing.scalars().all():
+                await session.delete(row)
+            await session.flush()
+
+            for m in matches:
+                match = CandidateJobMatchModel(
+                    job_id=job_id,
+                    candidate_id=m["candidate_id"],
+                    score=m.get("score", 0),
+                    rank=m.get("rank", 0),
+                    strengths=m.get("strengths", []),
+                    gaps=m.get("gaps", []),
+                    reasoning=m.get("reasoning", ""),
+                    model_used="gpt-4o-mini",
+                )
+                session.add(match)
+            await session.commit()
+    except Exception as e:
+        print(f"[db] Failed to save candidate matches for job {job_id}: {e}")
+
+
+async def db_get_cached_matches(job_id: str, max_age_hours: int = 1) -> list[dict] | None:
+    try:
+        async with async_session() as session:
+            cutoff = datetime.utcnow() - timedelta(hours=max_age_hours)
+            result = await session.execute(
+                select(CandidateJobMatchModel)
+                .where(CandidateJobMatchModel.job_id == job_id)
+                .where(CandidateJobMatchModel.created_at >= cutoff)
+                .order_by(CandidateJobMatchModel.rank.asc())
+            )
+            rows = result.scalars().all()
+            if not rows:
+                return None
+            return [
+                {
+                    "candidate_id": r.candidate_id,
+                    "score": r.score,
+                    "rank": r.rank,
+                    "strengths": r.strengths,
+                    "gaps": r.gaps,
+                    "reasoning": r.reasoning,
+                    "model_used": r.model_used,
+                }
+                for r in rows
+            ]
+    except Exception as e:
+        print(f"[db] Failed to get cached matches for job {job_id}: {e}")
+        return None
+
+
+async def db_get_candidates_with_performance() -> list[dict]:
+    try:
+        async with async_session() as session:
+            result = await session.execute(
+                select(CandidateModel).order_by(CandidateModel.created_at.desc())
+            )
+            rows = result.scalars().all()
+
+            candidates_list = []
+            for r in rows:
+                scores = []
+                sessions_result = await session.execute(
+                    select(SessionModel)
+                    .where(SessionModel.candidate_email == r.email)
+                    .where(SessionModel.report_json.isnot(None))
+                )
+                for s in sessions_result.scalars().all():
+                    report = s.report_json or {}
+                    verdict = report.get("final_recommendation", "")
+                    scores.append(verdict)
+
+                candidates_list.append({
+                    "id": r.id,
+                    "first_name": r.first_name,
+                    "last_name": r.last_name,
+                    "email": r.email,
+                    "phone": r.phone,
+                    "skills": r.skills,
+                    "experience": r.experience,
+                    "education": r.education,
+                    "summary": r.summary,
+                    "raw_resume_text": r.raw_resume_text,
+                    "past_scores": ", ".join(scores) if scores else "",
+                })
+            return candidates_list
+    except Exception as e:
+        print(f"[db] Failed to get candidates with performance: {e}")
+        return []

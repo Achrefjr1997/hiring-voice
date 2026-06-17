@@ -29,13 +29,14 @@ from voicehire.db.operations import (
     db_create_user, db_get_user_by_email, db_get_sessions_by_recruiter, db_get_session_history,
     db_update_candidate_name, db_create_candidate, db_list_candidates,
     db_create_job, db_list_jobs, db_get_job, db_update_job, db_delete_job, db_update_job_status,
-    db_get_stats, db_get_trends,
+    db_get_stats, db_get_trends, db_save_candidate_matches, db_get_cached_matches, db_get_candidates_with_performance,
 )
 from voicehire.api.auth import create_token, decode_token, hash_password, verify_password
 from voicehire.email.sender import send_invite_email
 from voicehire.services.file_extractor import extract_text
 from voicehire.services.resume_parser import ResumeParser
 from voicehire.services.job_ai_generator import JobDescriptionGenerator
+from voicehire.services.candidate_matcher import CandidateMatcher
 from voicehire.schemas.job import JobCreate, JobUpdate, JobStatusUpdate, GenerateDescriptionRequest
 from config import BAND_API_BASE, BAND_API_KEY, TTS_FORMAT, AIMLAPI_KEY, AIMLAPI_BASE_URL
 
@@ -90,6 +91,7 @@ listener = BandEventListener(registry)
 brain: SessionBrain | None = None
 resume_parser = ResumeParser(AIMLAPI_KEY, AIMLAPI_BASE_URL)
 job_generator = JobDescriptionGenerator(AIMLAPI_KEY, AIMLAPI_BASE_URL)
+candidate_matcher = CandidateMatcher(AIMLAPI_KEY, AIMLAPI_BASE_URL)
 
 # Frontend WebSocket relay: session_id -> set[WebSocket]
 frontend_ws: dict[str, set[WebSocket]] = {}
@@ -604,6 +606,33 @@ async def update_job_status(
     if not ok:
         return {"error": "Status update failed"}
     return await db_get_job(job_id)
+
+
+@app.post("/jobs/{job_id}/top-candidates")
+async def get_top_candidates(
+    job_id: str,
+    recruiter_id: str = Depends(require_user),
+    limit: int = 10,
+):
+    job = await db_get_job(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    if job["recruiter_id"] != recruiter_id:
+        raise HTTPException(403, "Access denied")
+
+    cached = await db_get_cached_matches(job_id, max_age_hours=1)
+    if cached is not None:
+        return {"candidates": cached[:limit], "cached": True}
+
+    candidates = await db_get_candidates_with_performance()
+    if not candidates:
+        return {"candidates": [], "cached": False}
+
+    matches = candidate_matcher.rank_candidates(job, candidates, limit=limit)
+
+    await db_save_candidate_matches(job_id, matches)
+
+    return {"candidates": matches[:limit], "cached": False}
 
 
 @app.get("/stats")

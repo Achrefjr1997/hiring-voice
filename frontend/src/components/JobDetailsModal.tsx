@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { useAuth } from "./AuthProvider";
+import TopCandidatesModal from "./TopCandidatesModal";
 
 interface Job {
   id: string;
@@ -37,9 +39,14 @@ function formatDate(d: string | null): string {
 
 export default function JobDetailsModal({ job, onClose }: JobDetailsModalProps) {
   const cfg = STATUS_CONFIG[job.status] || STATUS_CONFIG.draft;
+  const [showTopCandidates, setShowTopCandidates] = useState(false);
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={onClose}>
+    <>
+      {showTopCandidates && (
+        <TopCandidatesModal jobId={job.id} jobTitle={job.title} onClose={() => setShowTopCandidates(false)} />
+      )}
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={onClose}>
       <div
         className="bg-surface-default border border-border-default rounded-radius-card w-[640px] max-w-[95vw] max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
@@ -110,7 +117,13 @@ export default function JobDetailsModal({ job, onClose }: JobDetailsModalProps) 
           </div>
         </div>
 
-        <div className="px-8 py-5 border-t border-border-default flex justify-end">
+        <div className="px-8 py-5 border-t border-border-default flex justify-between">
+          <button
+            onClick={() => setShowTopCandidates(true)}
+            className="px-5 py-2 text-caption font-semibold bg-accent-gold text-bg-primary rounded-radius-input hover:brightness-110 transition-all"
+          >
+            🔍 Find Top 10 Candidates
+          </button>
           <button
             onClick={onClose}
             className="px-5 py-2 text-caption text-text-muted border border-border-default rounded-radius-input hover:text-text-primary transition-colors"
@@ -120,5 +133,5 @@ export default function JobDetailsModal({ job, onClose }: JobDetailsModalProps) 
         </div>
       </div>
     </div>
-  );
+  </>);
 }

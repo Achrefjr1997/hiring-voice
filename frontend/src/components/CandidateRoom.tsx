@@ -3,12 +3,12 @@ import { useParams } from "react-router-dom";
 import { useBandSession } from "../hooks/useBandSession";
 import { useIntegrityCheck } from "../hooks/useIntegrityCheck";
 import CandidateNameForm from "./CandidateNameForm";
-import CompetencySummary from "./CompetencySummary";
-import VoiceInterface from "./VoiceInterface";
-import { AlertCircle, Clock } from "lucide-react";
-import type { CompetencySummary as CompetencySummaryType } from "../types";
 
-type Stage = "validating" | "invalid" | "name-form" | "summary" | "interview" | "finished";
+import VoiceInterface from "./VoiceInterface";
+import { AlertCircle, Clock, CheckCircle, Loader2, Mic, Monitor } from "lucide-react";
+
+
+type Stage = "validating" | "invalid" | "name-form" | "permissions" | "preparing" | "interview" | "finished";
 
 export default function CandidateRoom() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -21,11 +21,22 @@ export default function CandidateRoom() {
   }, []);
   const [error, setError] = useState<string | null>(null);
   const [errorDetail, setErrorDetail] = useState<{ type: "completed" | "invalid" | "network" } | null>(null);
-  const [competencySummary, setCompetencySummary] = useState<CompetencySummaryType | null>(null);
+
+  const [preparingError, setPreparingError] = useState(false);
+  const [micGranted, setMicGranted] = useState(false);
+  const [fullscreenGranted, setFullscreenGranted] = useState(false);
+  const [permissionsLoading, setPermissionsLoading] = useState<string | null>(null);
   const [finishing, setFinishing] = useState(false);
   const [sessionInfo, setSessionInfo] = useState<{ title?: string } | null>(null);
   const [candidateName, setCandidateName] = useState("");
   useIntegrityCheck(sessionId ?? null, stage === "interview");
+
+  useEffect(() => {
+    if (stage !== "preparing") return;
+    const minTimer = setTimeout(() => setStage("interview"), 2500);
+    const safetyTimer = setTimeout(() => setPreparingError(true), 10000);
+    return () => { clearTimeout(minTimer); clearTimeout(safetyTimer); };
+  }, [stage]);
 
   useEffect(() => {
     if (state.status === "ended" && stage === "interview") {
@@ -81,43 +92,7 @@ export default function CandidateRoom() {
       method: "POST",
       body: new URLSearchParams({ first_name: first, last_name: last }),
     });
-
-    let summary: CompetencySummaryType | null = null;
-    let pollAttempts = 0;
-    while (!summary && pollAttempts < 30) {
-      pollAttempts++;
-      try {
-        const res = await fetch(`/session/${sessionId}/competencies`);
-        if (res.ok) {
-          summary = await res.json();
-          break;
-        }
-      } catch {
-        // retry
-      }
-      await new Promise((r) => setTimeout(r, 2000));
-    }
-
-    if (!summary) {
-      setError("Interview not ready after 60 seconds. Please try again later.");
-      return;
-    }
-
-    setCompetencySummary(summary);
-    setStage("summary");
-  };
-
-  const handleStartInterview = async () => {
-    if (!sessionId) return;
-    try {
-      if (document.documentElement.requestFullscreen) {
-        await document.documentElement.requestFullscreen();
-      }
-    } catch (err) {
-      console.warn("[AntiCheat] Fullscreen request failed:", err);
-    }
-    connect(sessionId);
-    setStage("interview");
+    setStage("permissions");
   };
 
   const handleFinish = async () => {
@@ -129,6 +104,35 @@ export default function CandidateRoom() {
       // Server will auto-end regardless
     }
     setStage("finished");
+  };
+
+  const handleGrantMic = async () => {
+    setPermissionsLoading("mic");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach((t) => t.stop());
+      setMicGranted(true);
+    } catch {
+      // Permission denied — user can retry
+    }
+    setPermissionsLoading(null);
+  };
+
+  const handleGrantFullscreen = async () => {
+    setPermissionsLoading("fullscreen");
+    try {
+      await document.documentElement.requestFullscreen();
+      setFullscreenGranted(true);
+    } catch {
+      // Fullscreen denied — user can retry
+    }
+    setPermissionsLoading(null);
+  };
+
+  const handleStartFromPermissions = () => {
+    if (!sessionId || !micGranted || !fullscreenGranted) return;
+    connect(sessionId);
+    setStage("preparing");
   };
 
   const currentFocus = useMemo(() => {
@@ -198,14 +202,110 @@ export default function CandidateRoom() {
     );
   }
 
-  if (stage === "summary" && competencySummary) {
+  if (stage === "permissions") {
+    const allGranted = micGranted && fullscreenGranted;
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <CompetencySummary
-          competencies={competencySummary.competencies}
-          estimatedDuration={competencySummary.estimated_duration}
-          onStart={handleStartInterview}
-        />
+      <div className="flex items-center justify-center min-h-screen bg-surface-cream p-4">
+        <div className="w-full max-w-md bg-surface-cream rounded-radius-card border border-border-cream shadow-lg p-8">
+          <h1 className="text-h2 font-serif text-text-inverted mb-2">Almost Ready</h1>
+          <p className="text-body text-text-muted mb-6">
+            Grant the following permissions to enable your interview experience.
+          </p>
+
+          <div className="space-y-4 mb-8">
+            <div className="flex items-center justify-between p-4 rounded-radius-card border border-border-cream bg-[#F5F2EB]">
+              <div className="flex items-center gap-3">
+                <div className={`w-9 h-9 rounded-full flex items-center justify-center ${micGranted ? "bg-status-live/15" : "bg-accent-gold/10"}`}>
+                  {micGranted
+                    ? <CheckCircle size={18} className="text-status-live" />
+                    : <Mic size={18} className="text-accent-gold" />
+                  }
+                </div>
+                <div>
+                  <p className="text-[14px] font-medium text-text-inverted">Microphone Access</p>
+                  <p className="text-caption text-text-muted">Required to record your responses</p>
+                </div>
+              </div>
+              {!micGranted && (
+                <button
+                  onClick={handleGrantMic}
+                  disabled={permissionsLoading === "mic"}
+                  className="px-4 py-1.5 text-caption font-medium rounded-radius-card bg-accent-gold text-text-on-accent hover:brightness-110 disabled:opacity-50 transition-all shrink-0"
+                >
+                  {permissionsLoading === "mic" ? "Granting…" : "Grant"}
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between p-4 rounded-radius-card border border-border-cream bg-[#F5F2EB]">
+              <div className="flex items-center gap-3">
+                <div className={`w-9 h-9 rounded-full flex items-center justify-center ${fullscreenGranted ? "bg-status-live/15" : "bg-accent-gold/10"}`}>
+                  {fullscreenGranted
+                    ? <CheckCircle size={18} className="text-status-live" />
+                    : <Monitor size={18} className="text-accent-gold" />
+                  }
+                </div>
+                <div>
+                  <p className="text-[14px] font-medium text-text-inverted">Fullscreen Access</p>
+                  <p className="text-caption text-text-muted">Provides a distraction-free experience</p>
+                </div>
+              </div>
+              {!fullscreenGranted && (
+                <button
+                  onClick={handleGrantFullscreen}
+                  disabled={permissionsLoading === "fullscreen"}
+                  className="px-4 py-1.5 text-caption font-medium rounded-radius-card bg-accent-gold text-text-on-accent hover:brightness-110 disabled:opacity-50 transition-all shrink-0"
+                >
+                  {permissionsLoading === "fullscreen" ? "Granting…" : "Grant"}
+                </button>
+              )}
+            </div>
+          </div>
+
+          <button
+            onClick={handleStartFromPermissions}
+            disabled={!allGranted}
+            className="w-full px-6 py-3 rounded-radius-card bg-accent-gold text-text-on-accent text-body font-semibold hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+          >
+            Start Interview
+          </button>
+
+          <p className="text-caption text-text-muted text-center mt-3">🔒 Your session is secure and encrypted.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (stage === "preparing") {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-surface-cream p-4">
+        <div className="w-16 h-16 border-4 border-accent-gold/20 border-t-accent-gold rounded-full animate-spin mb-6" />
+
+        <h2 className="text-h2 font-serif text-text-inverted mb-2 text-center">Preparing Your Interview</h2>
+        <p className="text-body text-text-muted text-center max-w-md">
+          Our AI Hiring Committee is reviewing your profile and generating your personalized competency rubric...
+        </p>
+
+        <div className="mt-8 space-y-3 text-caption text-text-muted">
+          <div className="flex items-center gap-2">
+            <CheckCircle size={14} className="text-status-live" /> Audio verified
+          </div>
+          <div className="flex items-center gap-2 animate-pulse">
+            <Loader2 size={14} className="text-accent-gold" /> Initializing Session Brain...
+          </div>
+        </div>
+
+        {preparingError && (
+          <div className="mt-8 text-center">
+            <p className="text-body text-status-alert mb-3">Something went wrong. Please try again.</p>
+            <button
+              onClick={() => { setPreparingError(false); setStage("name-form"); }}
+              className="px-6 py-2 rounded-radius-card bg-accent-gold text-text-on-accent font-medium hover:brightness-110 transition-all"
+            >
+              Try Again
+            </button>
+          </div>
+        )}
       </div>
     );
   }

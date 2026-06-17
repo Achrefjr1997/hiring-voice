@@ -107,7 +107,11 @@ Summary: {c.get('summary', '')}
                 return []
             cleaned = _extract_json(raw)
             result = json.loads(cleaned)
-            return result.get("matches", [])
+            matches = result.get("matches", [])
+            matches.sort(key=lambda x: x.get("score", 0), reverse=True)
+            for i, m in enumerate(matches):
+                m["rank"] = i + 1
+            return matches
         except Exception as e:
             print(f"[candidate_matcher] Error: {e}")
             return []

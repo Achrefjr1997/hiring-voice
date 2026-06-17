@@ -618,7 +618,7 @@ async def db_get_cached_matches(job_id: str, max_age_hours: int = 1) -> list[dic
                 select(CandidateJobMatchModel)
                 .where(CandidateJobMatchModel.job_id == job_id)
                 .where(CandidateJobMatchModel.created_at >= cutoff)
-                .order_by(CandidateJobMatchModel.rank.asc())
+                .order_by(CandidateJobMatchModel.score.desc())
             )
             rows = result.scalars().all()
             if not rows:

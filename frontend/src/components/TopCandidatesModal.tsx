@@ -1,6 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "./AuthProvider";
 import { useSidebar } from "./SidebarContext";
+
+interface CandidateInfo {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email?: string;
+  skills?: string[];
+}
 
 interface MatchedCandidate {
   candidate_id: string;
@@ -9,12 +17,38 @@ interface MatchedCandidate {
   strengths: string[];
   gaps: string[];
   reasoning: string;
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+  skills?: string[];
 }
 
 interface TopCandidatesModalProps {
   jobId: string;
   jobTitle: string;
   onClose: () => void;
+}
+
+function getInitials(first: string, last: string): string {
+  return `${first?.[0] || ""}${last?.[0] || ""}`.toUpperCase() || "?";
+}
+
+function getGradient(score: number): string {
+  if (score >= 71) return "linear-gradient(90deg, #facc15, #22c55e)";
+  if (score >= 41) return "linear-gradient(90deg, #fb923c, #facc15)";
+  return "linear-gradient(90deg, #ef4444, #fb923c)";
+}
+
+function getScoreLabel(score: number): string {
+  if (score >= 80) return "Strong Match";
+  if (score >= 60) return "Potential Fit";
+  return "Needs Review";
+}
+
+function getScoreTextColor(score: number): string {
+  if (score >= 80) return "text-status-live";
+  if (score >= 60) return "text-status-warning";
+  return "text-status-alert";
 }
 
 export default function TopCandidatesModal({ jobId, jobTitle, onClose }: TopCandidatesModalProps) {
@@ -24,6 +58,21 @@ export default function TopCandidatesModal({ jobId, jobTitle, onClose }: TopCand
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
+  const [candidateMap, setCandidateMap] = useState<Map<string, CandidateInfo>>(new Map());
+  const [candidateCount, setCandidateCount] = useState(0);
+
+  useEffect(() => {
+    if (!token) return;
+    fetch("/candidates", { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then((list: CandidateInfo[]) => {
+        setCandidateCount(list.length);
+        const map = new Map<string, CandidateInfo>();
+        list.forEach((c) => map.set(c.id, c));
+        setCandidateMap(map);
+      })
+      .catch(() => {});
+  }, [token]);
 
   const handleFindCandidates = async () => {
     if (!token) return;
@@ -36,7 +85,18 @@ export default function TopCandidatesModal({ jobId, jobTitle, onClose }: TopCand
       });
       if (!res.ok) throw new Error("Failed to find candidates");
       const data = await res.json();
-      setCandidates(data.candidates || []);
+      const raw: MatchedCandidate[] = data.candidates || [];
+      const enriched = raw.map((m) => {
+        const info = candidateMap.get(m.candidate_id);
+        return {
+          ...m,
+          first_name: info?.first_name || "Anonymous",
+          last_name: info?.last_name || "Candidate",
+          email: info?.email,
+          skills: info?.skills || [],
+        };
+      });
+      setCandidates(enriched);
       setSearched(true);
     } catch (e: any) {
       setError(e.message || "An error occurred");
@@ -68,18 +128,6 @@ export default function TopCandidatesModal({ jobId, jobTitle, onClose }: TopCand
     }
   };
 
-  const scoreColor = (s: number) => {
-    if (s >= 80) return "text-status-live";
-    if (s >= 60) return "text-status-warning";
-    return "text-status-alert";
-  };
-
-  const scoreBarColor = (s: number) => {
-    if (s >= 80) return "bg-status-live";
-    if (s >= 60) return "bg-status-warning";
-    return "bg-status-alert";
-  };
-
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60]" onClick={onClose}>
       <div
@@ -107,7 +155,7 @@ export default function TopCandidatesModal({ jobId, jobTitle, onClose }: TopCand
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <div className="text-4xl mb-4">🤖</div>
               <p className="text-body text-text-muted mb-6 max-w-md">
-                AI will analyze all candidates in your database against this job posting and return the top 10 matches ranked by skills, experience, past performance, and fit.
+                AI will analyze {candidateCount > 0 ? `${candidateCount} candidates` : "all candidates"} in your database against this job posting and return the top 10 matches ranked by skills, experience, past performance, and fit.
               </p>
               <button
                 onClick={handleFindCandidates}
@@ -120,8 +168,10 @@ export default function TopCandidatesModal({ jobId, jobTitle, onClose }: TopCand
 
           {loading && (
             <div className="flex flex-col items-center justify-center py-12">
-              <div className="w-8 h-8 border-2 border-accent-gold border-t-transparent rounded-full animate-spin mb-4" />
-              <p className="text-body text-text-muted">Analyzing candidates with AI…</p>
+              <div className="text-5xl mb-4 animate-pulse">🤖</div>
+              <p className="text-body text-text-muted">
+                Analyzing {candidateCount || "all"} candidates against {jobTitle}...
+              </p>
             </div>
           )}
 
@@ -137,62 +187,89 @@ export default function TopCandidatesModal({ jobId, jobTitle, onClose }: TopCand
               <p className="text-caption text-text-muted">
                 Ranked by AI match score — {candidates.length} candidate{candidates.length !== 1 ? "s" : ""} found
               </p>
-              {candidates.map((c) => (
-                <div key={c.candidate_id} className="bg-surface-raised border border-border-default rounded-radius-card p-5">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      <span className="w-8 h-8 rounded-full bg-accent-gold/15 text-accent-gold text-caption font-bold flex items-center justify-center">
-                        #{c.rank}
-                      </span>
-                      <div>
-                        <p className="text-body font-semibold text-text-primary">
-                          Candidate {c.candidate_id.slice(0, 8)}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className={`text-h3 font-bold ${scoreColor(c.score)}`}>{c.score}%</p>
-                      <p className="text-[10px] text-text-muted">match</p>
-                    </div>
-                  </div>
-
-                  <div className="w-full h-1.5 bg-white/[0.06] rounded-full mb-4">
-                    <div className={`h-full rounded-full ${scoreBarColor(c.score)} transition-all`} style={{ width: `${c.score}%` }} />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4 mb-3">
-                    <div>
-                      <p className="text-[11px] text-text-muted mb-1.5">Strengths</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {c.strengths.length > 0 ? c.strengths.map((s, i) => (
-                          <span key={i} className="text-[10px] px-2 py-0.5 rounded-radius-pill bg-status-live/15 text-status-live border border-status-live/20">
-                            + {s}
-                          </span>
-                        )) : <span className="text-[10px] text-text-muted">None identified</span>}
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-[11px] text-text-muted mb-1.5">Gaps</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {c.gaps.length > 0 ? c.gaps.map((g, i) => (
-                          <span key={i} className="text-[10px] px-2 py-0.5 rounded-radius-pill bg-status-alert/15 text-status-alert border border-status-alert/20">
-                            — {g}
-                          </span>
-                        )) : <span className="text-[10px] text-text-muted">No significant gaps</span>}
-                      </div>
-                    </div>
-                  </div>
-
-                  <p className="text-[12px] text-text-muted leading-relaxed mb-3">{c.reasoning}</p>
-
-                  <button
-                    onClick={() => handleSchedule(c)}
-                    className="text-[11px] text-accent-gold hover:underline"
+              {candidates.map((c) => {
+                const initials = getInitials(c.first_name || "", c.last_name || "");
+                const name = c.first_name && c.first_name !== "Anonymous"
+                  ? `${c.first_name} ${c.last_name}`
+                  : "Anonymous Candidate";
+                return (
+                  <div
+                    key={c.candidate_id}
+                    className="bg-surface-raised border border-border-default rounded-radius-card p-5 hover:border-accent-gold/50 hover:-translate-y-0.5 transition-all duration-200"
                   >
-                    Schedule Interview →
-                  </button>
-                </div>
-              ))}
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-accent-gold/20 flex items-center justify-center text-accent-gold font-bold text-sm">
+                          {initials}
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-text-primary text-body">{name}</h3>
+                          <p className="text-[11px] text-text-muted">#{c.rank} match</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className={`text-2xl font-bold ${getScoreTextColor(c.score)}`}>{c.score}%</p>
+                        <p className="text-[10px] text-text-muted">{getScoreLabel(c.score)}</p>
+                      </div>
+                    </div>
+
+                    <div className="w-full h-2 bg-white/[0.06] rounded-full overflow-hidden mb-4">
+                      <div
+                        className="h-full rounded-full transition-all duration-500"
+                        style={{ width: `${c.score}%`, background: getGradient(c.score) }}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                      <div>
+                        <p className="text-[11px] text-status-live mb-2 flex items-center gap-1">
+                          <span>✅</span> Strengths
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {c.strengths.length > 0
+                            ? c.strengths.slice(0, 3).map((s, i) => (
+                                <span key={i} className="text-[11px] px-2 py-0.5 rounded-radius-pill bg-green-900/30 text-green-300 border border-green-800">
+                                  {s}
+                                </span>
+                              ))
+                            : <span className="text-[10px] text-text-muted">None identified</span>}
+                          {c.strengths.length > 3 && (
+                            <span className="text-[10px] text-text-muted">+{c.strengths.length - 3} more</span>
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-[11px] text-status-warning mb-2 flex items-center gap-1">
+                          <span>⚠️</span> Gaps
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {c.gaps.length > 0
+                            ? c.gaps.slice(0, 3).map((g, i) => (
+                                <span key={i} className="text-[11px] px-2 py-0.5 rounded-radius-pill bg-amber-900/30 text-amber-300 border border-amber-800">
+                                  {g}
+                                </span>
+                              ))
+                            : <span className="text-[10px] text-text-muted">No significant gaps</span>}
+                          {c.gaps.length > 3 && (
+                            <span className="text-[10px] text-text-muted">+{c.gaps.length - 3} more</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="border-l-2 border-accent-gold/50 pl-3 mb-4">
+                      <p className="text-[13px] text-text-muted leading-relaxed italic">"{c.reasoning}"</p>
+                    </div>
+
+                    <button
+                      onClick={() => handleSchedule(c)}
+                      className="w-full py-2 rounded-radius-card border border-accent-gold text-accent-gold text-[13px] font-medium hover:bg-accent-gold hover:text-bg-primary transition-colors"
+                    >
+                      Schedule Interview
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           )}
 

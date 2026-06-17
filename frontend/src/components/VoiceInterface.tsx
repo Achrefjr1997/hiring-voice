@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Mic, MicOff, Bot, User } from "lucide-react";
+import { Mic, MicOff, Bot, User, Target } from "lucide-react";
 import type { ParsedVoiceHireEvent } from "../types";
 
 interface Turn {
@@ -145,11 +145,17 @@ export default function VoiceInterface({ events, onAudioReady, sessionStatus, cu
         onScroll={handleScroll}
         className="flex flex-col gap-6 min-h-80 max-h-[60vh] overflow-y-auto w-full px-4 py-4 scroll-smooth"
       >
-        {currentFocus && (
-          <div className="self-start px-3 py-1.5 rounded-radius-pill bg-accent-gold/10 border border-accent-gold/30 text-[13px] text-accent-gold font-medium transition-all duration-300 max-w-full whitespace-nowrap overflow-hidden text-ellipsis">
-            🎯 Current Focus: {currentFocus.name} <span className="opacity-60">({currentFocus.domain})</span>
-          </div>
-        )}
+        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-accent-gold/10 border border-accent-gold/30 text-accent-gold font-medium mb-6 transition-all duration-300 max-w-full whitespace-nowrap overflow-hidden text-ellipsis self-start">
+          <Target size={16} />
+          {currentFocus ? (
+            <>
+              <span>Current Focus: {currentFocus.name}</span>
+              <span className="text-text-muted text-sm">({currentFocus.domain})</span>
+            </>
+          ) : (
+            <span>Getting Started…</span>
+          )}
+        </div>
 
         {transcript.length === 0 && sessionStatus === "active" && (
           <div className="bg-surface-default rounded-radius-card border border-border-cream p-6 text-center shadow-sm event-enter">

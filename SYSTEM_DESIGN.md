@@ -478,8 +478,8 @@ erDiagram
   candidates ||--o{ candidate_job_matches : has
 
   candidate_job_matches {
-    string job_id PK FK
-    string candidate_id PK FK
+    string job_id PK
+    string candidate_id PK
     float score "0-100 match score"
     int rank "1-based rank"
     json strengths "list of strength labels"

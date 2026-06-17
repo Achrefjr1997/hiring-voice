@@ -225,7 +225,7 @@ flowchart TB
 
   React -->|HTTP POST| Server
   React -->|WebSocket| WS
-  WS -->|ws://localhost:8000/ws/{id}| Server
+  WS -->|WebSocket relay| Server
   Recorder -->|audio/webm| Server
 
   Server --> Auth

@@ -30,7 +30,7 @@ export default function CandidateNameForm({
           value={firstName}
           onChange={(e) => setFirstName(e.target.value)}
           placeholder="John"
-          className="rounded-radius-input border border-border-default bg-surface-default px-3 py-2 text-body focus:outline-none focus:ring-2 focus:ring-accent-gold/50 text-text-primary placeholder:text-text-muted"
+          className="rounded-radius-input border border-border-cream bg-[#F5F2EB] px-3 py-2 text-body focus:outline-none focus:ring-2 focus:ring-accent-gold/50 text-text-inverted placeholder:text-text-muted"
         />
       </div>
 
@@ -40,17 +40,19 @@ export default function CandidateNameForm({
           value={lastName}
           onChange={(e) => setLastName(e.target.value)}
           placeholder="Doe"
-          className="rounded-radius-input border border-border-default bg-surface-default px-3 py-2 text-body focus:outline-none focus:ring-2 focus:ring-accent-gold/50 text-text-primary placeholder:text-text-muted"
+          className="rounded-radius-input border border-border-cream bg-[#F5F2EB] px-3 py-2 text-body focus:outline-none focus:ring-2 focus:ring-accent-gold/50 text-text-inverted placeholder:text-text-muted"
         />
       </div>
 
       <button
         onClick={handleSubmit}
         disabled={loading || !firstName.trim() || !lastName.trim()}
-        className="self-start px-6 py-2.5 rounded-radius-card bg-accent-gold text-text-on-accent text-body font-medium hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+        className="w-full px-6 py-2.5 rounded-radius-card bg-accent-gold text-text-on-accent text-body font-medium hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
       >
         {loading ? "Joining\u2026" : "Start Interview"}
       </button>
+
+      <p className="text-caption text-text-muted text-center mt-1">🔒 Your session is secure and encrypted.</p>
     </div>
   );
 }

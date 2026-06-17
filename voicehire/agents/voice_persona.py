@@ -42,7 +42,7 @@ class VoicePersona(BandAgent):
     async def _generate_tts(self, text: str, model: str, filename: str | None = None) -> str | None:
         try:
             chunks = []
-            async for chunk in stream_tts(text, model=model, output_format=TTS_FORMAT, api_key=DEEPGRAM_KEY):
+            async for chunk in stream_tts(text, model=model, output_format=TTS_FORMAT, api_key=DEEPGRAM_KEY, speed=1.1, encoding="linear16", sample_rate=48000):
                 chunks.append(chunk)
             if not chunks:
                 return None

@@ -17,7 +17,7 @@ DEEPGRAM_KEY = os.environ.get("DEEPGRAM_KEY", "")
 DEEPGRAM_STT_MODEL = "nova-2"
 DEEPGRAM_TTS_URL = "https://api.deepgram.com/v1/speak"
 TTS_FILLER_MODEL = "aura-2-thalia-en"
-TTS_PROBE_MODEL = "aura-2-apollo-en"
+TTS_PROBE_MODEL = "aura-2-jupiter-en"
 TTS_FORMAT = "mp3"
 
 SMTP_HOST = os.environ.get("SMTP_HOST", "")

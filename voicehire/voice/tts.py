@@ -14,10 +14,12 @@ async def stream_tts(
         "Content-Type": "text/plain",
         "Accept": f"audio/{output_format}",
     }
+    params = {"model": model, **kwargs}
     async with httpx.AsyncClient(timeout=30.0) as client:
         async with client.stream(
             "POST",
-            f"{DEEPGRAM_TTS_URL}?model={model}",
+            DEEPGRAM_TTS_URL,
+            params=params,
             content=text,
             headers=headers,
         ) as response:

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { Mic, MicOff } from "lucide-react";
+import { useEffect, useRef, useState, useCallback } from "react";
+import { Mic, MicOff, Bot, User } from "lucide-react";
 import type { ParsedVoiceHireEvent } from "../types";
 
 interface Turn {
@@ -12,9 +12,10 @@ interface VoiceInterfaceProps {
   events: ParsedVoiceHireEvent[];
   onAudioReady: (blob: Blob) => Promise<string | null>;
   sessionStatus: "idle" | "ready" | "active" | "ended";
+  currentFocus?: { name: string; domain: string } | null;
 }
 
-export default function VoiceInterface({ events, onAudioReady, sessionStatus }: VoiceInterfaceProps) {
+export default function VoiceInterface({ events, onAudioReady, sessionStatus, currentFocus }: VoiceInterfaceProps) {
   const [transcript, setTranscript] = useState<Turn[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const [aiSpeaking, setAiSpeaking] = useState(false);
@@ -22,6 +23,22 @@ export default function VoiceInterface({ events, onAudioReady, sessionStatus }: 
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const fillerRef = useRef<HTMLAudioElement | null>(null);
   const recordingRef = useRef(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isNearBottom, setIsNearBottom] = useState(true);
+
+  const handleScroll = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const threshold = 120;
+    setIsNearBottom(el.scrollHeight - el.scrollTop - el.clientHeight < threshold);
+  }, []);
+
+  useEffect(() => {
+    if (isNearBottom) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [transcript.length, isNearBottom]);
 
   useEffect(() => {
     const latest = events[0];
@@ -118,21 +135,50 @@ export default function VoiceInterface({ events, onAudioReady, sessionStatus }: 
     }
   };
 
+  const recordingTime = isRecording ? "Listening\u2026 Tap to stop" : aiSpeaking ? "Interviewer speaking\u2026" : "Tap to speak";
+
   return (
-    <div className="flex flex-col gap-4 w-full max-w-sm items-center">
-      <div className="flex flex-col gap-2 min-h-64 max-h-96 overflow-y-auto w-full px-2">
-        {transcript.length === 0 && sessionStatus === "active" && (
-          <p className="text-center text-text-muted text-body italic py-8">Waiting for the first question\u2026</p>
+    <div className="flex flex-col items-center w-full max-w-xl mx-auto gap-6">
+      {/* Transcript container */}
+      <div
+        ref={containerRef}
+        onScroll={handleScroll}
+        className="flex flex-col gap-6 min-h-80 max-h-[60vh] overflow-y-auto w-full px-4 py-4 scroll-smooth"
+      >
+        {currentFocus && (
+          <div className="self-start px-3 py-1.5 rounded-radius-pill bg-accent-gold/10 border border-accent-gold/30 text-[13px] text-accent-gold font-medium transition-all duration-300 max-w-full whitespace-nowrap overflow-hidden text-ellipsis">
+            🎯 Current Focus: {currentFocus.name} <span className="opacity-60">({currentFocus.domain})</span>
+          </div>
         )}
-        {transcript.map((turn, i) => (
-          <div key={i} className={turn.role === "interviewer" ? "self-start" : "self-end"}>
+
+        {transcript.length === 0 && sessionStatus === "active" && (
+          <div className="bg-surface-default rounded-radius-card border border-border-cream p-6 text-center shadow-sm event-enter">
+            <Bot size={36} className="text-accent-gold mx-auto mb-3" />
+            <h3 className="text-[17px] font-semibold text-text-inverted mb-1">Welcome to your VoiceHire interview</h3>
+            <p className="text-[15px] text-text-muted leading-relaxed">
+              Speak clearly and take your time. You can pause anytime. Click the microphone below when you're ready.
+            </p>
+          </div>
+        )}
+
+        {transcript.length > 0 && transcript.map((turn, i) => (
+          <div
+            key={i}
+            className={`flex items-end gap-3 ${turn.role === "interviewer" ? "justify-start" : "justify-end"} event-enter`}
+          >
+            {turn.role === "interviewer" && (
+              <div className="w-8 h-8 rounded-full bg-accent-gold/15 flex items-center justify-center flex-shrink-0 mb-1">
+                <Bot size={16} className="text-accent-gold" />
+              </div>
+            )}
+
             <div
-              className={`rounded-radius-card px-3 py-2 text-body max-w-xs ${
+              className={`rounded-radius-card px-4 py-3 text-[16px] leading-relaxed ${
                 turn.role === "interviewer"
                   ? turn.isFiller
-                    ? "bg-accent-gold/10 text-accent-gold italic border border-accent-gold/20"
-                    : "bg-surface-default text-text-primary border border-border-default"
-                  : "bg-accent-gold/15 text-text-primary"
+                    ? "bg-accent-gold/10 text-accent-gold italic border border-accent-gold/20 max-w-[70%]"
+                    : "bg-surface-default text-text-primary border border-border-default shadow-sm max-w-[70%]"
+                  : "bg-[#E8E4DC] text-text-inverted max-w-[70%]"
               }`}
             >
               {turn.text}
@@ -144,27 +190,37 @@ export default function VoiceInterface({ events, onAudioReady, sessionStatus }: 
                 </span>
               )}
             </div>
+
+            {turn.role === "candidate" && (
+              <div className="w-8 h-8 rounded-full bg-[#E8E4DC] flex items-center justify-center flex-shrink-0 mb-1">
+                <User size={16} className="text-text-muted" />
+              </div>
+            )}
           </div>
         ))}
+
+        <div ref={messagesEndRef} />
       </div>
 
-      <button
-        onClick={handleMicClick}
-        disabled={aiSpeaking || sessionStatus !== "active"}
-        className={`w-20 h-20 rounded-full flex items-center justify-center transition-all duration-200 ${
-          isRecording
-            ? "bg-status-alert/10 border-2 border-status-alert scale-110 recording-pulse"
-            : "bg-accent-gold/10 border-2 border-accent-gold/30 hover:bg-accent-gold/20"
-        } disabled:opacity-40 disabled:cursor-not-allowed`}
-      >
-        {isRecording
-          ? <MicOff size={32} className="text-status-alert" />
-          : <Mic size={32} className="text-accent-gold" />}
-      </button>
+      {/* Microphone */}
+      <div className="flex flex-col items-center gap-3">
+        <button
+          onClick={handleMicClick}
+          disabled={aiSpeaking || sessionStatus !== "active"}
+          title={recordingTime}
+          className={`w-24 h-24 rounded-full flex items-center justify-center transition-all duration-200 ${
+            isRecording
+              ? "bg-status-alert/10 border-2 border-status-alert scale-110 recording-pulse"
+              : "bg-accent-gold/10 border-2 border-accent-gold/30 hover:bg-accent-gold/20 hover:scale-105"
+          } disabled:opacity-40 disabled:cursor-not-allowed`}
+        >
+          {isRecording
+            ? <MicOff size={36} className="text-status-alert" />
+            : <Mic size={36} className="text-accent-gold" />}
+        </button>
 
-      <p className="text-center text-caption text-text-muted">
-        {aiSpeaking ? "Interviewer speaking\u2026" : isRecording ? "Listening\u2026" : "Tap to speak"}
-      </p>
+        <p className="text-[13px] text-text-muted text-center">{recordingTime}</p>
+      </div>
     </div>
   );
 }

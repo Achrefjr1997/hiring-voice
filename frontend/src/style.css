@@ -156,6 +156,17 @@ body.candidate-mode {
   animation: thinking-dot 1.4s ease-in-out infinite both;
 }
 
+/* Checkmark draw animation */
+@keyframes checkmark-draw {
+  0% { stroke-dashoffset: 50; }
+  100% { stroke-dashoffset: 0; }
+}
+
+.checkmark-draw {
+  stroke-dasharray: 50;
+  animation: checkmark-draw 0.6s ease-out forwards;
+}
+
 /* Scrollbar styling for dark mode */
 ::-webkit-scrollbar {
   width: 6px;

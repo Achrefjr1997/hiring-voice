@@ -138,7 +138,7 @@ export default function LoginPage() {
           <div className="flex justify-center">
             <button
               type="button"
-              onClick={() => window.location.href = "http://localhost:8000/auth/google/login"}
+              onClick={() => window.location.href = "/auth/google/login"}
               className="w-12 h-12 rounded-full bg-white flex items-center justify-center hover:scale-105 transition-transform shadow-md border border-gray-200"
               aria-label="Sign in with Google"
             >

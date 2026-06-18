@@ -29,3 +29,11 @@ voicehire_dev plan.md
 
 voicehire-uxui-redesign-brief.md
 mockups/
+pitch deck/
+.claude/
+scripts/
+CLAUDE.md
+tests/
+voicehire_dev plan.md
+voicehire-uxui-redesign-brief.md
+.pytest_cache/

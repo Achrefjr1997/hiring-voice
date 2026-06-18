@@ -38,3 +38,8 @@ voicehire-uxui-redesign-brief.md
 .pytest_cache/
 
 skills-lock.json
+
+# Audio generated files
+voicehire/audio_output/
+*.mp3
+*.webm

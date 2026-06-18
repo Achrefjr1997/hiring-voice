@@ -1,6 +1,8 @@
 # VoiceHire — AI-Powered Interviewing Platform
 
-> Band of Agents Hackathon 2026 · Competency-Driven AI Interviews
+> [![Band of Agents Hackathon](pitch_deck/w2qbolodctcvil38mrvosg2x_imageLink_fuyiibx1x3wq0jqs7ermhaae.webp)](https://lablab.ai/ai-hackathons/band-of-agents-hackathon)
+
+> Competency-Driven AI Interviews
 
 **Features:** Job Posting Management · AI-Generated Descriptions · Resume Parsing · Multi-Agent Interviews · Real-Time Probes · Integrity Monitoring · Hiring Committee Deliberation · Analytics Dashboard · Candidate-Job AI Matching
 
@@ -73,3 +75,17 @@ cd frontend && npm run dev            # Frontend -> http://localhost:5173
 For detailed architecture, agent roles, database schema, API reference, and deployment strategy:
 
 ➡️ **[SYSTEM_DESIGN.md](SYSTEM_DESIGN.md)**
+
+---
+
+## 📊 Pitch Deck
+
+[![VoiceHire Pitch Deck](pitch_deck/VoiceHire.png)](pitch_deck/VoiceHire.pdf)
+
+---
+
+## 🎥 Demo
+
+<a href="https://youtu.be/b2X2ZTAZU3A">
+  <img src="https://img.youtube.com/vi/b2X2ZTAZU3A/maxresdefault.jpg" alt="VoiceHire Demo" width="100%" />
+</a>

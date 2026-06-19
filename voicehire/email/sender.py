@@ -1,7 +1,11 @@
 import asyncio
+import os
+import httpx
 import aiosmtplib
 from email.message import EmailMessage
 from config import SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, EMAIL_FROM
+
+BREVO_API_KEY = os.environ.get("BREVO_API_KEY", "")
 
 INVITE_SUBJECT = "You've been invited to a VoiceHire interview"
 INVITE_BODY = """
@@ -33,21 +37,45 @@ async def send_invite_email(
     interview_link: str,
     duration_minutes: int = 30,
 ) -> bool:
+    body = INVITE_BODY.format(
+        candidate_name=candidate_name or "Candidate",
+        interview_link=interview_link,
+        duration_minutes=duration_minutes,
+    ).strip()
+
+    # Use Brevo HTTP API (avoids SMTP port blocking)
+    if BREVO_API_KEY:
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                r = await client.post(
+                    "https://api.brevo.com/v3/smtp/email",
+                    headers={"api-key": BREVO_API_KEY, "Content-Type": "application/json"},
+                    json={
+                        "sender": {"name": "VoiceHire", "email": EMAIL_FROM or "noreply@voicehire.ai"},
+                        "to": [{"email": to_email, "name": candidate_name or "Candidate"}],
+                        "subject": INVITE_SUBJECT,
+                        "textContent": body,
+                    },
+                )
+                if r.is_success:
+                    print(f"[email] Invite sent via Brevo API to {to_email}")
+                    return True
+                print(f"[email] Brevo API error {r.status_code}: {r.text[:200]}")
+                return False
+        except Exception as e:
+            print(f"[email] Brevo API failed: {e}")
+            return False
+
+    # Fallback: SMTP
     if not SMTP_HOST:
-        print(f"[email] SMTP not configured — skipping email to {to_email}")
+        print(f"[email] No email provider configured — skipping email to {to_email}")
         return False
     try:
         msg = EmailMessage()
         msg["From"] = EMAIL_FROM
         msg["To"] = to_email
         msg["Subject"] = INVITE_SUBJECT
-        body = INVITE_BODY.format(
-            candidate_name=candidate_name or "Candidate",
-            interview_link=interview_link,
-            duration_minutes=duration_minutes,
-        )
-        msg.set_content(body.strip())
-
+        msg.set_content(body)
         use_ssl = int(SMTP_PORT) == 465
         await asyncio.wait_for(
             aiosmtplib.send(
@@ -62,7 +90,7 @@ async def send_invite_email(
             ),
             timeout=15,
         )
-        print(f"[email] Invite sent to {to_email}")
+        print(f"[email] Invite sent via SMTP to {to_email}")
         return True
     except Exception as e:
         print(f"[email] Failed to send invite to {to_email}: {e}")

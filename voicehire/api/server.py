@@ -566,6 +566,15 @@ async def list_candidates(recruiter_id: str = Depends(require_user)):
     return await db_list_candidates()
 
 
+@app.get("/candidate/{candidate_id}")
+async def get_candidate(candidate_id: str, recruiter_id: str = Depends(require_user)):
+    candidates = await db_list_candidates()
+    for c in candidates:
+        if c["id"] == candidate_id:
+            return c
+    raise HTTPException(404, "Candidate not found")
+
+
 # ────────────── JOB POSTINGS ──────────────
 
 @app.post("/jobs/generate-description")

@@ -49,14 +49,18 @@ async def send_invite_email(
         msg.set_content(body.strip())
 
         use_ssl = int(SMTP_PORT) == 465
-        await aiosmtplib.send(
-            msg,
-            hostname=SMTP_HOST,
-            port=int(SMTP_PORT),
-            username=SMTP_USER,
-            password=SMTP_PASSWORD,
-            use_tls=use_ssl,
-            start_tls=not use_ssl,
+        await asyncio.wait_for(
+            aiosmtplib.send(
+                msg,
+                hostname=SMTP_HOST,
+                port=int(SMTP_PORT),
+                username=SMTP_USER,
+                password=SMTP_PASSWORD,
+                use_tls=use_ssl,
+                start_tls=not use_ssl,
+                timeout=10,
+            ),
+            timeout=15,
         )
         print(f"[email] Invite sent to {to_email}")
         return True

@@ -38,6 +38,7 @@ class Session(Base):
 class Candidate(Base):
     __tablename__ = "candidates"
     id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex[:12])
+    recruiter_id = Column(String, ForeignKey("users.id"), nullable=True, index=True)
     first_name = Column(String, nullable=True)
     last_name = Column(String, nullable=True)
     email = Column(String, nullable=True)

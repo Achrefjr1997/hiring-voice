@@ -18,3 +18,17 @@ class Base(DeclarativeBase):
 async def init_db() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Migration: add recruiter_id to candidates if missing
+        try:
+            await conn.execute(
+                __import__("sqlalchemy").text(
+                    "ALTER TABLE candidates ADD COLUMN recruiter_id TEXT REFERENCES users(id)"
+                )
+            )
+            await conn.execute(
+                __import__("sqlalchemy").text(
+                    "CREATE INDEX IF NOT EXISTS ix_candidates_recruiter_id ON candidates(recruiter_id)"
+                )
+            )
+        except Exception:
+            pass  # Column already exists

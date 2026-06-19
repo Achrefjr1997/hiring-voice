@@ -27,7 +27,7 @@ from voicehire.db.database import init_db
 from voicehire.db.operations import (
     db_create_session, db_insert_event, db_end_session, ROOM_TO_SESSION,
     db_create_user, db_get_user_by_email, db_get_sessions_by_recruiter, db_get_session_history,
-    db_update_candidate_name, db_create_candidate, db_list_candidates,
+    db_update_candidate_name, db_create_candidate, db_list_candidates, db_get_candidate,
     db_create_job, db_list_jobs, db_get_job, db_update_job, db_delete_job, db_update_job_status,
     db_get_stats, db_get_trends, db_save_candidate_matches, db_get_cached_matches, db_get_candidates_with_performance,
     db_create_google_user, db_update_user_google,
@@ -550,7 +550,7 @@ async def upload_candidate(
             "raw_resume_text": text,
             "original_filename": file.filename or "upload",
         }
-        candidate_id = await db_create_candidate(candidate_data)
+        candidate_id = await db_create_candidate(candidate_data, recruiter_id=recruiter_id)
         return {"id": candidate_id, **parsed}
     except ValueError as e:
         return {"error": str(e)}
@@ -563,16 +563,17 @@ async def upload_candidate(
 
 @app.get("/candidates")
 async def list_candidates(recruiter_id: str = Depends(require_user)):
-    return await db_list_candidates()
+    return await db_list_candidates(recruiter_id=recruiter_id)
 
 
 @app.get("/candidate/{candidate_id}")
 async def get_candidate(candidate_id: str, recruiter_id: str = Depends(require_user)):
-    candidates = await db_list_candidates()
-    for c in candidates:
-        if c["id"] == candidate_id:
-            return c
-    raise HTTPException(404, "Candidate not found")
+    candidate = await db_get_candidate(candidate_id)
+    if not candidate:
+        raise HTTPException(404, "Candidate not found")
+    if candidate.get("recruiter_id") and candidate["recruiter_id"] != recruiter_id:
+        raise HTTPException(403, "Access denied")
+    return candidate
 
 
 # ────────────── JOB POSTINGS ──────────────
@@ -698,7 +699,7 @@ async def get_top_candidates(
     if cached is not None:
         return {"candidates": cached[:limit], "cached": True}
 
-    candidates = await db_get_candidates_with_performance()
+    candidates = await db_get_candidates_with_performance(recruiter_id=recruiter_id)
     if not candidates:
         return {"candidates": [], "cached": False}
 

@@ -336,10 +336,11 @@ async def db_end_session(
         print(f"[db] Failed to end session {session_id}: {e}")
 
 
-async def db_create_candidate(data: dict) -> str:
+async def db_create_candidate(data: dict, recruiter_id: str | None = None) -> str:
     try:
         async with async_session() as session:
             candidate = CandidateModel(
+                recruiter_id=recruiter_id,
                 first_name=data.get("first_name"),
                 last_name=data.get("last_name"),
                 email=data.get("email"),
@@ -361,12 +362,13 @@ async def db_create_candidate(data: dict) -> str:
         raise
 
 
-async def db_list_candidates() -> list[dict]:
+async def db_list_candidates(recruiter_id: str | None = None) -> list[dict]:
     try:
         async with async_session() as session:
-            result = await session.execute(
-                select(CandidateModel).order_by(CandidateModel.created_at.desc())
-            )
+            q = select(CandidateModel).order_by(CandidateModel.created_at.desc())
+            if recruiter_id is not None:
+                q = q.where(CandidateModel.recruiter_id == recruiter_id)
+            result = await session.execute(q)
             rows = result.scalars().all()
             return [
                 {
@@ -403,6 +405,7 @@ async def db_get_candidate(candidate_id: str) -> dict | None:
                 return None
             return {
                 "id": r.id,
+                "recruiter_id": r.recruiter_id,
                 "first_name": r.first_name,
                 "last_name": r.last_name,
                 "email": r.email,
@@ -640,12 +643,13 @@ async def db_get_cached_matches(job_id: str, max_age_hours: int = 1) -> list[dic
         return None
 
 
-async def db_get_candidates_with_performance() -> list[dict]:
+async def db_get_candidates_with_performance(recruiter_id: str | None = None) -> list[dict]:
     try:
         async with async_session() as session:
-            result = await session.execute(
-                select(CandidateModel).order_by(CandidateModel.created_at.desc())
-            )
+            q = select(CandidateModel).order_by(CandidateModel.created_at.desc())
+            if recruiter_id is not None:
+                q = q.where(CandidateModel.recruiter_id == recruiter_id)
+            result = await session.execute(q)
             rows = result.scalars().all()
 
             candidates_list = []

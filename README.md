@@ -86,6 +86,6 @@ For detailed architecture, agent roles, database schema, API reference, and depl
 
 ## 🎥 Demo
 
-<a href="https://youtu.be/b2X2ZTAZU3A">
+<a href="https://www.loom.com/share/af39d19aa5ed4c5b919812dca5b2370a">
   <img src="https://img.youtube.com/vi/b2X2ZTAZU3A/maxresdefault.jpg" alt="VoiceHire Demo" width="100%" />
 </a>

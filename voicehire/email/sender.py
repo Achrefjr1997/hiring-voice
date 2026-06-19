@@ -48,13 +48,15 @@ async def send_invite_email(
         )
         msg.set_content(body.strip())
 
+        use_ssl = int(SMTP_PORT) == 465
         await aiosmtplib.send(
             msg,
             hostname=SMTP_HOST,
-            port=SMTP_PORT,
+            port=int(SMTP_PORT),
             username=SMTP_USER,
             password=SMTP_PASSWORD,
-            start_tls=True,
+            use_tls=use_ssl,
+            start_tls=not use_ssl,
         )
         print(f"[email] Invite sent to {to_email}")
         return True

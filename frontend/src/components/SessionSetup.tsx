@@ -22,10 +22,12 @@ export default function SessionSetup({
   onSubmit,
   loading,
   prefillResume = "",
+  prefillEmail = "",
 }: {
   onSubmit: (jd: string, resume: string, rubric: string, duration: string, enforcementLevel: string, violationThreshold: number, gracePeriod: number, demoMode: boolean, candidateEmail?: string, jobId?: string) => Promise<void>;
   loading: boolean;
   prefillResume?: string;
+  prefillEmail?: string;
 }) {
   const { token } = useAuth();
   const [jd, setJd] = useState("");
@@ -65,6 +67,12 @@ export default function SessionSetup({
       setResume(prefillResume);
     }
   }, [prefillResume]);
+
+  useEffect(() => {
+    if (prefillEmail) {
+      setCandidateEmail(prefillEmail);
+    }
+  }, [prefillEmail]);
 
   const handleJobSelect = (id: string) => {
     setJobId(id);

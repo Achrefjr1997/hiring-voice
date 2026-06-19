@@ -20,7 +20,7 @@ interface Candidate {
 }
 
 function CandidateProfileModal({ candidate, onClose }: { candidate: Candidate; onClose: () => void }) {
-  const { setActiveView, setPrefillResume, setNavigateToView } = useSidebar();
+  const { setActiveView, setPrefillResume, setPrefillEmail, setNavigateToView } = useSidebar();
 
   const handleSchedule = () => {
     const resumeText = candidate.raw_resume_text || [
@@ -33,6 +33,7 @@ function CandidateProfileModal({ candidate, onClose }: { candidate: Candidate; o
       candidate.summary,
     ].filter(Boolean).join("\n");
     setPrefillResume(resumeText);
+    setPrefillEmail(candidate.email || "");
     onClose();
     setActiveView("interviews");
     setNavigateToView("setup");
@@ -171,7 +172,7 @@ function CandidateProfileModal({ candidate, onClose }: { candidate: Candidate; o
 
 export default function CandidatesCvsView() {
   const { token } = useAuth();
-  const { setActiveView, setPrefillResume, setNavigateToView } = useSidebar();
+  const { setActiveView, setPrefillResume, setPrefillEmail, setNavigateToView } = useSidebar();
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -240,6 +241,7 @@ export default function CandidatesCvsView() {
       candidate.summary,
     ].filter(Boolean).join("\n");
     setPrefillResume(resumeText);
+    setPrefillEmail(candidate.email || "");
     setActiveView("interviews");
     setNavigateToView("setup");
   };

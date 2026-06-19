@@ -20,7 +20,7 @@ type ViewMode = "history" | "setup" | "live";
 export default function RecruiterDashboard() {
   const { state, connect } = useBandSession();
   const { token } = useAuth();
-  const { activeView, prefillResume, navigateToView, setNavigateToView, setPrefillResume } = useSidebar();
+  const { activeView, prefillResume, prefillEmail, navigateToView, setNavigateToView, setPrefillResume, setPrefillEmail } = useSidebar();
   const navigate = useNavigate();
   const [view, setView] = useState<ViewMode>("history");
   const [loading, setLoading] = useState(false);
@@ -44,6 +44,7 @@ export default function RecruiterDashboard() {
   useEffect(() => {
     if (view !== "setup" && prefillResume) {
       setPrefillResume("");
+      setPrefillEmail("");
     }
   }, [view]);
 
@@ -140,7 +141,7 @@ export default function RecruiterDashboard() {
                 </div>
                 <div className="flex-1 overflow-y-auto p-8">
                   <div className="max-w-2xl mx-auto">
-                    <SessionSetup onSubmit={handleSessionCreate} loading={loading} prefillResume={prefillResume} />
+                    <SessionSetup onSubmit={handleSessionCreate} loading={loading} prefillResume={prefillResume} prefillEmail={prefillEmail} />
                   </div>
                 </div>
               </>

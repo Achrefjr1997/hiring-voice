@@ -53,7 +53,7 @@ function getScoreTextColor(score: number): string {
 
 export default function TopCandidatesModal({ jobId, jobTitle, onClose }: TopCandidatesModalProps) {
   const { token } = useAuth();
-  const { setActiveView, setPrefillResume, setNavigateToView } = useSidebar();
+  const { setActiveView, setPrefillResume, setPrefillEmail, setNavigateToView } = useSidebar();
   const [candidates, setCandidates] = useState<MatchedCandidate[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -120,6 +120,7 @@ export default function TopCandidatesModal({ jobId, jobTitle, onClose }: TopCand
         candidate.summary,
       ].filter(Boolean).join("\n");
       setPrefillResume(resumeText);
+      setPrefillEmail(candidate.email || "");
       onClose();
       setActiveView("interviews");
       setNavigateToView("setup");

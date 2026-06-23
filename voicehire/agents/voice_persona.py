@@ -29,12 +29,81 @@ class VoicePersona(BandAgent):
         os.makedirs(AUDIO_DIR, exist_ok=True)
 
     async def handle_mention(self, room_id: str, message: dict) -> None:
-        content = message["content"]
+        content = message.get("content", "")
         if "SPEAK:" in content:
             probe_text = content.split("SPEAK:", 1)[1].strip()
-            await self._speak_probe(room_id, probe_text)
+            await self._stream_tts_live(room_id, probe_text)
+
+    async def _stream_tts_live(self, room_id: str, text: str) -> None:
+        """Stream TTS audio to frontend in real-time via WebSocket, dual-write to disk for Evidence Portfolio.
+
+        Flow:
+        1. Stream chunks from Deepgram, relaying each to frontend as it arrives
+        2. Collect all chunks for disk write
+        3. After streaming, save complete audio to disk
+        4. Always send SPEAK event with audioUrl (fallback + event log)
+
+        Falls back to file-based _speak_probe if no TTS WebSocket is connected.
+        """
+        if not hasattr(self, 'tts_relay_fn') or not self.tts_relay_fn:
+            print("[voice-persona] No TTS relay fn — falling back to HTTP-only")
+            return await self._speak_probe(room_id, text)
+
+        chunks: list[bytes] = []
+        stream_started = False
+        audio_url: str | None = None
+
+        try:
+            print(f"[voice-persona] Starting TTS stream: {text[:80]}...")
+            async for chunk in stream_tts(
+                text, model=TTS_PROBE_MODEL, output_format=TTS_FORMAT,
+                api_key=DEEPGRAM_KEY, speed=1.1, encoding="linear16", sample_rate=48000,
+            ):
+                chunks.append(chunk)
+                if not stream_started:
+                    await self.tts_relay_fn(
+                        room_id,
+                        json.dumps({"type": "SPEAK_START", "text": text}),
+                        is_binary=False,
+                    )
+                    stream_started = True
+                await self.tts_relay_fn(room_id, chunk, is_binary=True)
+
+            if chunks:
+                await self.tts_relay_fn(room_id, json.dumps({"type": "SPEAK_END"}), is_binary=False)
+
+                # Dual-write: save complete audio to disk for Evidence Portfolio
+                name = f"{uuid.uuid4().hex}.{TTS_FORMAT}"
+                filepath = os.path.join(AUDIO_DIR, name)
+                with open(filepath, "wb") as f:
+                    for chunk in chunks:
+                        f.write(chunk)
+                audio_url = f"/audio/{name}"
+                print(f"[voice-persona] TTS streamed {len(chunks)} chunks → {audio_url}")
+            else:
+                print("[voice-persona] TTS returned zero chunks — will send SPEAK event without audioUrl")
+
+        except Exception as e:
+            print(f"[voice-persona] TTS streaming failed: {e}")
+            if chunks:
+                try:
+                    name = f"{uuid.uuid4().hex}.{TTS_FORMAT}"
+                    filepath = os.path.join(AUDIO_DIR, name)
+                    with open(filepath, "wb") as f:
+                        for chunk in chunks:
+                            f.write(chunk)
+                    audio_url = f"/audio/{name}"
+                except Exception as write_err:
+                    print(f"[voice-persona] Failed to save fallback audio: {write_err}")
+
+        # ALWAYS send SPEAK event (even on failure) so frontend never hangs
+        await self.send_event(
+            room_id,
+            f"SPEAK: {json.dumps({'text': text, 'audioUrl': audio_url or '', 'model': TTS_PROBE_MODEL, 'isFiller': False})}",
+        )
 
     async def _speak_probe(self, room_id: str, text: str) -> None:
+        """Fallback: generate TTS, save to file, send SPEAK event with audioUrl."""
         audio_url = await self._generate_tts(text, TTS_PROBE_MODEL)
         if audio_url:
             await self.send_event(room_id, f"SPEAK: {json.dumps({'text': text, 'audioUrl': audio_url, 'model': TTS_PROBE_MODEL, 'isFiller': False})}")

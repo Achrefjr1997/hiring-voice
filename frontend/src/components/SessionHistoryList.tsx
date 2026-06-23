@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import { Monitor } from "lucide-react";
 
 interface SessionRow {
   id: string;
@@ -17,12 +18,18 @@ const STATUS_BADGES: Record<string, string> = {
 
 export default function SessionHistoryList({
   sessions,
+  activeSessionIds,
+  onMonitor,
   onCreateNew,
 }: {
   sessions: SessionRow[];
+  activeSessionIds?: string[];
+  onMonitor?: (sessionId: string) => void;
   onCreateNew?: () => void;
 }) {
   const navigate = useNavigate();
+
+  const isActive = (id: string) => activeSessionIds?.includes(id);
 
   return (
     <div>
@@ -52,29 +59,51 @@ export default function SessionHistoryList({
                 <th className="py-3 px-4 text-left font-medium">Candidate</th>
                 <th className="py-3 px-4 text-left font-medium">Status</th>
                 <th className="py-3 px-4 text-right font-medium">Violations</th>
+                <th className="py-3 px-4 text-right font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {sessions.map((s) => (
-                <tr
-                  key={s.id}
-                  className="border-b border-border-default hover:bg-surface-hover cursor-pointer transition-colors last:border-0"
-                  onClick={() => navigate(`/report/${s.id}?back=history`)}
-                >
-                  <td className="py-4 px-4 text-text-secondary">
-                    {s.created_at ? new Date(s.created_at * 1000).toLocaleDateString() : "—"}
-                  </td>
-                  <td className="py-4 px-4 font-medium text-text-primary">
-                    {s.candidate_name || "—"}
-                  </td>
-                  <td className="py-4 px-4">
-                    <span className={`inline-block px-2 py-0.5 rounded-radius-card text-caption font-medium border ${STATUS_BADGES[s.status] ?? "bg-surface-raised text-text-muted border-border-default"}`}>
-                      {s.status}
-                    </span>
-                  </td>
-                  <td className="py-4 px-4 text-right text-text-secondary">{s.violation_count}</td>
-                </tr>
-              ))}
+              {sessions.map((s) => {
+                const active = isActive(s.id);
+                return (
+                  <tr
+                    key={s.id}
+                    className="border-b border-border-default hover:bg-surface-hover transition-colors last:border-0"
+                  >
+                    <td className="py-4 px-4 text-text-secondary cursor-pointer" onClick={() => navigate(`/report/${s.id}?back=history`)}>
+                      {s.created_at ? new Date(s.created_at * 1000).toLocaleDateString() : "—"}
+                    </td>
+                    <td className="py-4 px-4 font-medium text-text-primary cursor-pointer" onClick={() => navigate(`/report/${s.id}?back=history`)}>
+                      {s.candidate_name || "—"}
+                    </td>
+                    <td className="py-4 px-4 cursor-pointer" onClick={() => navigate(`/report/${s.id}?back=history`)}>
+                      <span className={`inline-block px-2 py-0.5 rounded-radius-card text-caption font-medium border ${STATUS_BADGES[s.status] ?? "bg-surface-raised text-text-muted border-border-default"}`}>
+                        {s.status}
+                      </span>
+                    </td>
+                    <td className="py-4 px-4 text-right text-text-secondary cursor-pointer" onClick={() => navigate(`/report/${s.id}?back=history`)}>
+                      {s.violation_count}
+                    </td>
+                    <td className="py-4 px-4 text-right">
+                      {active && onMonitor ? (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onMonitor(s.id); }}
+                          className="inline-flex items-center gap-1 text-caption font-medium text-accent-gold hover:text-accent-gold/80 transition-colors"
+                        >
+                          <Monitor size={14} /> Monitor
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => navigate(`/report/${s.id}?back=history`)}
+                          className="inline-flex items-center gap-1 text-caption font-medium text-text-muted hover:text-accent-gold transition-colors"
+                        >
+                          View Report
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

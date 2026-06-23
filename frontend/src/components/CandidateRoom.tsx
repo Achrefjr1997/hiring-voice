@@ -13,7 +13,25 @@ type Stage = "validating" | "invalid" | "name-form" | "permissions" | "preparing
 
 export default function CandidateRoom() {
   const { sessionId } = useParams<{ sessionId: string }>();
-  const { state, connect, sendAudio } = useBandSession();
+  const { sessions, connect, sendAudio } = useBandSession();
+  const state = sessions[sessionId ?? ""] ?? {
+    sessionId: sessionId ?? null,
+    status: "idle" as const,
+    events: [],
+    coverageMap: {},
+    decision: null,
+    connected: false,
+    rooms: null,
+    candidateName: null,
+    candidateStatus: "waiting" as const,
+    verdictRevealed: false,
+    deliberationFullText: null,
+    isSessionReady: false,
+    integrityViolations: [],
+    enforcementConfig: { level: "OBSERVATION_ONLY" as const, threshold: 3, gracePeriod: 1, demoMode: true },
+    integrityPaused: false,
+    demoMode: true,
+  };
   const [stage, setStage] = useState<Stage>("validating");
 
   useEffect(() => {
@@ -445,8 +463,9 @@ export default function CandidateRoom() {
 
         <VoiceInterface
           events={state.events}
-          onAudioReady={sendAudio}
+          onAudioReady={(blob) => sendAudio(sessionId!, blob)}
           sessionStatus={state.status}
+          sessionId={sessionId ?? null}
           currentFocus={currentFocus}
         />
       </div>

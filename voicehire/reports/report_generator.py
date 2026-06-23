@@ -134,8 +134,10 @@ async def generate_report_from_events(session_id: str) -> dict | None:
         return None
 
 
-def generate_report(brain: SessionBrain) -> dict:
-    map = brain.coverage_map
+def generate_report(brain: SessionBrain, session_id: str | None = None) -> dict:
+    coverage_map = brain.get_coverage_map(session_id) if session_id else None
+    if not coverage_map:
+        return {}
     competencies = [
         {
             "id": c.competency_id,
@@ -147,9 +149,11 @@ def generate_report(brain: SessionBrain) -> dict:
             "evidence_count": c.evidence_count,
             "depth_required": c.depth_required,
         }
-        for c in map.competencies.values()
+        for c in coverage_map.competencies.values()
     ]
-    summary = map.summary()
+    summary = coverage_map.summary()
+    evidence = brain.get_evidence_portfolio(session_id) if session_id else []
+    conv = brain.get_conversation_history(session_id) if session_id else []
     return {
         "competency_scorecard": competencies,
         "coverage_summary": {
@@ -158,6 +162,6 @@ def generate_report(brain: SessionBrain) -> dict:
             "must_have_total": summary["must_have_total"],
             "must_have_covered": summary["must_have_covered"],
         },
-        "evidence_portfolio": brain.evidence_portfolio[-50:],
-        "conversation_history": brain.conversation_history,
+        "evidence_portfolio": evidence[-50:],
+        "conversation_history": conv,
     }

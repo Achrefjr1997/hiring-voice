@@ -13,21 +13,22 @@ import CandidatesCvsView from "./CandidatesCvsView";
 import ActiveRecruitmentsView from "./ActiveRecruitmentsView";
 import CreateJobModal from "./CreateJobModal";
 import AnalyticsView from "./AnalyticsView";
-import { Clock, Wifi, WifiOff, ChevronUp, ChevronDown, AlertTriangle } from "lucide-react";
+import { Clock, WifiOff, ChevronUp, ChevronDown, AlertTriangle, Monitor, Layers } from "lucide-react";
 
 type ViewMode = "history" | "setup" | "live";
 
 export default function RecruiterDashboard() {
-  const { state, connect } = useBandSession();
+  const { sessions, connect } = useBandSession();
   const { token } = useAuth();
   const { activeView, prefillResume, prefillEmail, navigateToView, setNavigateToView, setPrefillResume, setPrefillEmail } = useSidebar();
   const navigate = useNavigate();
   const [view, setView] = useState<ViewMode>("history");
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showCreateJob, setShowCreateJob] = useState(false);
   const [jobListKey, setJobListKey] = useState(0);
   const [sessionLink, setSessionLink] = useState<string | null>(null);
-  const [sessions, setSessions] = useState<any[]>([]);
+  const [historySessions, setHistorySessions] = useState<any[]>([]);
   const [candidateEmail, setCandidateEmail] = useState<string | null>(null);
   const [sidePanels, setSidePanels] = useState({ competency: true, eventLog: true, integrity: true });
 
@@ -52,9 +53,17 @@ export default function RecruiterDashboard() {
     if (!token) return;
     fetch("/sessions", { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => r.json())
-      .then((data) => setSessions(data.sessions || []))
+      .then((data) => setHistorySessions(data.sessions || []))
       .catch(() => {});
   }, [token]);
+
+  const refreshHistory = () => {
+    if (!token) return;
+    fetch("/sessions", { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then((data) => setHistorySessions(data.sessions || []))
+      .catch(() => {});
+  };
 
   const handleSessionCreate = async (jd: string, resume: string, rubric: string, duration: string, enforcementLevel: string, violationThreshold: number, gracePeriod: number, demoMode: boolean, ce?: string, jobId?: string) => {
     setLoading(true);
@@ -79,30 +88,57 @@ export default function RecruiterDashboard() {
       connect(data.session_id);
       setSessionLink(`${window.location.origin}/interview/${data.session_id}`);
       setCandidateEmail(ce || null);
+      setSelectedSessionId(data.session_id);
       setView("live");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSendInvite = async () => {
-    if (!state.sessionId) return;
-    const res = await fetch(`/session/${state.sessionId}/send-invite`, { method: "POST" });
+  const handleSendInvite = async (sessionId: string) => {
+    const res = await fetch(`/session/${sessionId}/send-invite`, { method: "POST" });
     if (!res.ok) throw new Error("Failed to send invite");
   };
 
-  const handleIntegrityResume = async () => {
-    if (!state.sessionId) return;
-    await fetch(`/session/${state.sessionId}/integrity-resume`, { method: "POST" });
+  const handleIntegrityResume = async (sessionId: string) => {
+    await fetch(`/session/${sessionId}/integrity-resume`, { method: "POST" });
   };
 
-  const handleIntegrityTerminate = async () => {
-    if (!state.sessionId) return;
-    await fetch(`/session/${state.sessionId}/integrity-terminate`, { method: "POST" });
+  const handleIntegrityTerminate = async (sessionId: string) => {
+    await fetch(`/session/${sessionId}/integrity-terminate`, { method: "POST" });
   };
 
-  const covered = Object.values(state.coverageMap).filter((c) => c.status === "COVERED").length;
-  const total = Object.keys(state.coverageMap).length;
+  const handleMonitorSession = (sessionId: string) => {
+    connect(sessionId);
+    setSelectedSessionId(sessionId);
+    setView("live");
+    if (!sessions[sessionId]) {
+      fetch(`/session/${sessionId}`)
+        .then(() => {
+          setSessionLink(`${window.location.origin}/interview/${sessionId}`);
+        })
+        .catch(() => {});
+    } else {
+      setSessionLink(`${window.location.origin}/interview/${sessionId}`);
+    }
+  };
+
+  const handleBackToDashboard = () => {
+    setView("history");
+    setSelectedSessionId(null);
+    refreshHistory();
+  };
+
+  const liveHistorySessions = historySessions.filter(
+    (s) => s.status === "active" || s.status === "READY"
+  );
+
+  const activeSessionIds = liveHistorySessions.map((s) => s.id);
+
+  const state = selectedSessionId ? sessions[selectedSessionId] : null;
+
+  const covered = state ? Object.values(state.coverageMap).filter((c) => c.status === "COVERED").length : 0;
+  const total = state ? Object.keys(state.coverageMap).length : 0;
 
   return (
 
@@ -122,8 +158,62 @@ export default function RecruiterDashboard() {
                     + New Interview
                   </button>
                 </div>
-                <div className="flex-1 overflow-y-auto p-8">
-                  <SessionHistoryList sessions={sessions} />
+                <div className="flex-1 overflow-y-auto p-8 space-y-6">
+
+                  {activeSessionIds.length > 0 && (
+                    <div>
+                      <h2 className="text-caption font-semibold text-text-secondary uppercase tracking-wide mb-3 flex items-center gap-2">
+                        <Layers size={14} /> Active Sessions
+                      </h2>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {activeSessionIds.map((sid) => {
+                          const wsState = sessions[sid];
+                          const hist = historySessions.find((s) => s.id === sid);
+                          const name = wsState?.candidateName ?? hist?.candidate_name ?? sid.slice(0, 8);
+                          const status = wsState?.candidateStatus ?? (hist?.status === "READY" ? "waiting" : "active");
+                          const wsCov = wsState ? Object.values(wsState.coverageMap) : [];
+                          const cov = wsCov.filter((x) => x.status === "COVERED").length;
+                          const tot = wsCov.length;
+                          return (
+                            <div key={sid} className="bg-surface-default border border-border-default rounded-radius-card p-4 hover:border-accent-gold/50 transition-colors">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-body font-semibold text-text-primary">{name}</span>
+                                <span className={`inline-block w-2 h-2 rounded-full ${
+                                  status === "connected" ? "bg-green-500" :
+                                  status === "finished" ? "bg-yellow-500" :
+                                  "bg-gray-400"
+                                }`} />
+                              </div>
+                              <div className="text-caption text-text-muted space-y-1">
+                                <div>Status: <span className="font-medium text-text-primary capitalize">{String(status)}</span></div>
+                                {wsState && tot > 0 && (
+                                  <div>Coverage: <span className="font-medium text-text-primary">{cov}/{tot}</span> competencies</div>
+                                )}
+                                {wsState && (
+                                  <div>Violations: <span className="font-medium text-text-primary">{wsState.integrityViolations.length}</span></div>
+                                )}
+                                {!wsState && (
+                                  <div className="text-text-muted italic">Click Monitor to reconnect</div>
+                                )}
+                              </div>
+                              <button
+                                onClick={() => handleMonitorSession(sid)}
+                                className="mt-3 w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-surface-hover border border-border-default rounded-radius-input text-caption font-medium text-text-primary hover:border-accent-gold hover:text-accent-gold transition-all"
+                              >
+                                <Monitor size={14} /> Monitor
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  <SessionHistoryList
+                    sessions={historySessions}
+                    activeSessionIds={activeSessionIds}
+                    onMonitor={handleMonitorSession}
+                  />
                 </div>
               </>
             )}
@@ -147,11 +237,18 @@ export default function RecruiterDashboard() {
               </>
             )}
 
-            {view === "live" && (
+            {view === "live" && state && (
               <>
                 {/* Status bar */}
                 <div className="flex items-center gap-5 px-6 py-3.5 border-b border-border-default bg-gradient-to-r from-surface-default to-surface-raised shrink-0">
-                  {/* LIVE Indicator - More Prominent */}
+                  <button
+                    onClick={handleBackToDashboard}
+                    className="text-caption text-accent-gold hover:text-accent-gold/80 transition-colors mr-2"
+                  >
+                    ← Dashboard
+                  </button>
+
+                  {/* LIVE Indicator */}
                   <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg bg-green-50 border border-green-200">
                     <span className="w-2.5 h-2.5 rounded-full bg-green-500 live-pulse" />
                     <span className="text-sm font-bold text-green-700 uppercase tracking-wide">
@@ -170,7 +267,7 @@ export default function RecruiterDashboard() {
                     </>
                   )}
 
-                  {/* Timer and Connection Status - More Prominent */}
+                  {/* Timer */}
                   <div className="ml-auto flex items-center gap-4">
                     {state.isSessionReady && (
                       <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-hover">
@@ -188,7 +285,7 @@ export default function RecruiterDashboard() {
                   </div>
                 </div>
 
-                {/* Demo mode banner - More Distinct */}
+                {/* Demo mode banner */}
                 {state.demoMode && (
                   <div className="mx-6 mt-3 rounded-lg bg-gradient-to-r from-yellow-50 to-orange-50 border-2 border-yellow-300 px-4 py-2.5 flex items-center gap-3 shrink-0 shadow-sm">
                     <svg className="w-5 h-5 text-yellow-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -207,10 +304,10 @@ export default function RecruiterDashboard() {
                     <p className="text-caption font-semibold text-status-alert mb-1">Interview Paused — Integrity Policy Violation</p>
                     <p className="text-caption text-status-alert/70 mb-2">Candidate has triggered the violation threshold.</p>
                     <div className="flex gap-2">
-                      <button onClick={handleIntegrityResume} className="px-3 py-1.5 rounded-radius-card bg-status-live text-bg-primary text-caption font-medium hover:brightness-110 transition-all">
+                      <button onClick={() => handleIntegrityResume(selectedSessionId!)} className="px-3 py-1.5 rounded-radius-card bg-status-live text-bg-primary text-caption font-medium hover:brightness-110 transition-all">
                         Resume Interview
                       </button>
-                      <button onClick={handleIntegrityTerminate} className="px-3 py-1.5 rounded-radius-card bg-status-alert text-white text-caption font-medium hover:brightness-110 transition-all">
+                      <button onClick={() => handleIntegrityTerminate(selectedSessionId!)} className="px-3 py-1.5 rounded-radius-card bg-status-alert text-white text-caption font-medium hover:brightness-110 transition-all">
                         Terminate Interview
                       </button>
                     </div>
@@ -231,8 +328,8 @@ export default function RecruiterDashboard() {
                           candidateStatus={state.candidateStatus}
                           isSessionReady={state.isSessionReady}
                           candidateEmail={candidateEmail}
-                          onSendInvite={handleSendInvite}
-                          sessionId={state.sessionId || undefined}
+                          onSendInvite={() => handleSendInvite(selectedSessionId!)}
+                          sessionId={selectedSessionId || undefined}
                         />
                       </div>
                     </div>

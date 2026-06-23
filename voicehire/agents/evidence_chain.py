@@ -42,7 +42,7 @@ class EvidenceChain(BandAgent):
         self.skeptic_id = skeptic_id
 
     async def handle_mention(self, room_id: str, message: dict) -> None:
-        content = message["content"]
+        content = message.get("content", "")
         if "EXTRACT:" not in content:
             return
         parts = content.split("EXTRACT:", 1)[1]

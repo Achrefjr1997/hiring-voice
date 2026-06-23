@@ -213,33 +213,33 @@ class BandEventListener:
         except Exception as e:
             print(f"[event-listener] Error handling message: {e}")
 
+    async def _handle_agent_mention(self, agent: object, room_id: str, payload: dict) -> None:
+        try:
+            await agent.handle_mention(room_id, payload)
+        except Exception as e:
+            print(f"[event-listener] Agent {getattr(agent, 'handle', '?')} raised: {e}")
+
+
     async def _route_message(self, room_id: str | None, payload: dict, content: str) -> None:
         metadata = payload.get("metadata", {})
         mentions = metadata.get("mentions", [])
+        # Relay to frontend first (non-blocking for UI), then fire-and-forget agent
+        if hasattr(self, 'relay_fn') and self.relay_fn:
+            await self.relay_fn(room_id or "", "message_created", payload)
         for mention in mentions:
             mention_id = mention.get("id", "")
             agent = self.registry.get_by_uuid(mention_id)
             if agent and hasattr(agent, "handle_mention"):
                 print(f"[event-listener] Routing @mention to {agent.handle}")
-                try:
-                    await agent.handle_mention(room_id or "", payload)
-                except Exception as e:
-                    print(f"[event-listener] Agent {agent.handle} raised: {e}")
-                if hasattr(self, 'relay_fn') and self.relay_fn:
-                    await self.relay_fn(room_id or "", "message_created", payload)
+                asyncio.create_task(self._handle_agent_mention(agent, room_id or "", payload))
                 return
-        if hasattr(self, 'relay_fn') and self.relay_fn:
-            await self.relay_fn(room_id or "", "message_created", payload)
 
     async def _route_event(self, room_id: str | None, content: str) -> None:
         routes = self.registry.route_event(content)
         for handle, agent in routes:
             if hasattr(agent, "handle_mention"):
                 print(f"[event-listener] Routing event '{content[:60]}...' to {handle}")
-                try:
-                    await agent.handle_mention(room_id or "", {"content": content})
-                except Exception as e:
-                    print(f"[event-listener] Agent {handle} raised: {e}")
+                asyncio.create_task(self._handle_agent_mention(agent, room_id or "", {"content": content}))
         if hasattr(self, 'relay_fn') and self.relay_fn:
             sender = "system"
             for prefix, agent_handle in EVENT_ROUTES.items():

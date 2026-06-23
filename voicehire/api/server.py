@@ -118,12 +118,34 @@ oauth.register(
 
 # Frontend WebSocket relay: session_id -> set[WebSocket]
 frontend_ws: dict[str, set[WebSocket]] = {}
+# TTS streaming WebSocket: session_id -> set[WebSocket]
+tts_connections: dict[str, set[WebSocket]] = {}
 room_to_session: dict[str, str] = {}
+
+async def _update_conversation_history_from_speak(session_id: str, content: str) -> None:
+    """Extract audioUrl from SPEAK event and update the brain's conversation_history."""
+    global brain
+    if not brain:
+        return
+    try:
+        speak_json = content.split("SPEAK:", 1)[1].strip()
+        payload = json.loads(speak_json)
+        audio_url = payload.get("audioUrl", "")
+        text = payload.get("text", "")
+        if audio_url:
+            brain.set_conversation_audio_url(session_id, text, audio_url)
+    except (json.JSONDecodeError, IndexError, KeyError):
+        pass
+
 
 async def _relay_to_frontend(room_id: str, event_type: str, payload: dict) -> None:
     session_id = room_to_session.get(room_id)
     if not session_id:
         return
+    # Update conversation_history with probe audio URLs from SPEAK events
+    content = payload.get("content", "")
+    if "SPEAK:" in content:
+        await _update_conversation_history_from_speak(session_id, content)
     clients = frontend_ws.get(session_id, set())
     if not clients:
         return
@@ -136,6 +158,27 @@ async def _relay_to_frontend(room_id: str, event_type: str, payload: dict) -> No
     for ws in clients:
         try:
             await ws.send_text(msg)
+        except Exception:
+            dead.add(ws)
+    if dead:
+        clients -= dead
+
+
+async def _relay_tts_to_frontend(room_id: str, data: str | bytes, is_binary: bool = False) -> None:
+    """Send TTS audio chunk or control message to frontend via TTS WebSocket."""
+    session_id = room_to_session.get(room_id)
+    if not session_id:
+        return
+    clients = tts_connections.get(session_id, set())
+    if not clients:
+        return
+    dead: set[WebSocket] = set()
+    for ws in clients:
+        try:
+            if is_binary and isinstance(data, bytes):
+                await ws.send_bytes(data)
+            else:
+                await ws.send_text(data if isinstance(data, str) else data.decode())
         except Exception:
             dead.add(ws)
     if dead:
@@ -178,13 +221,9 @@ async def _process_audio_background(
         return
 
     # Update conversation_history with audio_url
-    if filename:
+    if filename and brain:
         try:
-            if brain and hasattr(brain, 'conversation_history'):
-                for entry in reversed(brain.conversation_history):
-                    if entry.get("type") == "response" and not entry.get("audio_url"):
-                        entry["audio_url"] = f"/audio/{filename}"
-                        break
+            brain.set_response_audio_url(session_id, f"/audio/{filename}")
         except Exception as e:
             print(f"[server] Failed to update history audio_url: {e}")
 
@@ -224,6 +263,7 @@ async def lifespan(app: FastAPI):
     )
     rubric = RubricSynthesizer(brain_id=brain_id or "")
     voice = VoicePersona(brain_id=brain_id or "")
+    voice.tts_relay_fn = lambda rid, data, is_binary=False: _relay_tts_to_frontend(rid, data, is_binary)
     chain = EvidenceChain(brain_id=brain_id or "", skeptic_id=skeptic_id or "")
     skeptic = IntegritySkeptic(brain_id=brain_id or "")
     committee = HiringCommittee(brain_id=brain_id or "")
@@ -345,7 +385,7 @@ async def get_session_history(id: str, recruiter_id: str = Depends(require_user)
     if mem_session:
         live_violations = mem_session.get("integrity_violations", [])
         history["session"]["violation_count"] = len(live_violations)
-        brain_fallback = brain and brain.coverage_map
+        brain_fallback = brain and brain.get_coverage_map(id)
     else:
         history["session"]["violation_count"] = 0
         brain_fallback = False
@@ -353,7 +393,7 @@ async def get_session_history(id: str, recruiter_id: str = Depends(require_user)
     if not history["report"]:
         report = await generate_report_from_events(id)
         if not report and brain_fallback:
-            report = generate_report(brain)
+            report = generate_report(brain, id)
             report["session_id"] = id
             report["integrity_violations"] = live_violations if mem_session else []
             report["enforcement_config"] = mem_session.get("enforcement_config", {}) if mem_session else {}
@@ -408,11 +448,13 @@ async def create_session(
     ROOM_TO_SESSION[band_session.committee_room_id] = session_id
 
     if brain:
-        brain.foundation_room_id = band_session.foundation_room_id
-        brain.exploration_room_id = band_session.exploration_room_id
-        brain.committee_room_id = band_session.committee_room_id
-        brain.session_id = session_id
-        brain.set_duration(duration_minutes)
+        brain.init_session(
+            session_id,
+            band_session.foundation_room_id,
+            band_session.exploration_room_id,
+            band_session.committee_room_id,
+            duration_minutes,
+        )
 
     brain_token = os.environ["BAND_TOKEN_SESSION_BRAIN"]
     rubric_id = factory.get_agent_id("Rubric Synthesizer")
@@ -505,8 +547,8 @@ async def end_session(session_id: str):
     SESSIONS[session_id]["status"] = "ENDED"
 
     report_data = await generate_report_from_events(session_id)
-    if not report_data and brain and brain.coverage_map:
-        report_data = generate_report(brain)
+    if not report_data and brain and brain.get_coverage_map(session_id):
+        report_data = generate_report(brain, session_id)
         report_data["session_id"] = session_id
         report_data["status"] = "completed"
         report_data["integrity_violations"] = session.get("integrity_violations", [])
@@ -785,11 +827,12 @@ async def get_competency_summary(session_id: str):
     if not session:
         raise HTTPException(404, "Session not found")
     global brain
-    if not brain or not brain.coverage_map:
+    cmap = brain.get_coverage_map(session_id) if brain else None
+    if not cmap:
         raise HTTPException(503, "Competency graph not ready — retrying")
     competencies = [
         {"name": c.name, "domain": c.domain, "classification": c.classification, "weight": c.weight}
-        for c in brain.coverage_map.competencies.values()
+        for c in cmap.competencies.values()
     ]
     num_must = sum(1 for c in competencies if c["classification"] == "MUST_HAVE")
     return {
@@ -804,9 +847,9 @@ async def get_report(session_id: str):
     if not session:
         raise HTTPException(404, "Session not found")
     global brain
-    if not brain or not brain.coverage_map:
+    if not brain or not brain.get_coverage_map(session_id):
         raise HTTPException(503, "Report not ready yet")
-    report = generate_report(brain)
+    report = generate_report(brain, session_id)
     report["session_id"] = session_id
     report["status"] = session.get("status")
     report["integrity_violations"] = session.get("integrity_violations", [])
@@ -825,7 +868,7 @@ async def get_pdf(session_id: str):
 
     # Try in-memory first (live session)
     if session:
-        report = generate_report(brain) if brain and brain.coverage_map else None
+        report = generate_report(brain, session_id) if brain and brain.get_coverage_map(session_id) else None
         try:
             history = await db_get_session_history(session_id)
         except Exception:
@@ -919,8 +962,8 @@ async def _auto_end_session(session_id: str) -> None:
         print(f"[server] auto-end failed: {e}")
     SESSIONS[session_id]["status"] = "ENDED"
     report_data = await generate_report_from_events(session_id)
-    if not report_data and brain and brain.coverage_map:
-        report_data = generate_report(brain)
+    if not report_data and brain and brain.get_coverage_map(session_id):
+        report_data = generate_report(brain, session_id)
         report_data["session_id"] = session_id
         report_data["status"] = "completed"
         report_data["integrity_violations"] = session.get("integrity_violations", [])
@@ -989,8 +1032,8 @@ async def terminate_integrity(session_id: str):
     await _relay_to_session(session_id, "INTEGRITY_TERMINATED:")
 
     report_data = await generate_report_from_events(session_id)
-    if not report_data and brain and brain.coverage_map:
-        report_data = generate_report(brain)
+    if not report_data and brain and brain.get_coverage_map(session_id):
+        report_data = generate_report(brain, session_id)
         report_data["session_id"] = session_id
         report_data["status"] = "completed"
         report_data["integrity_violations"] = session.get("integrity_violations", [])
@@ -1040,3 +1083,21 @@ async def ws_relay(ws: WebSocket, session_id: str):
             if session.get("status") != "CANDIDATE_FINISHED":
                 session["status"] = "CANDIDATE_FINISHED"
                 asyncio.create_task(_auto_end_session(session_id))
+
+
+@app.websocket("/ws/tts/{session_id}")
+async def tts_ws(ws: WebSocket, session_id: str):
+    """Dedicated WebSocket for real-time TTS audio streaming."""
+    await ws.accept()
+    if session_id not in tts_connections:
+        tts_connections[session_id] = set()
+    tts_connections[session_id].add(ws)
+    print(f"[tts-ws] Client connected for session {session_id[:8]}...")
+    try:
+        while True:
+            await ws.receive_text()
+    except WebSocketDisconnect:
+        pass
+    finally:
+        tts_connections.get(session_id, set()).discard(ws)
+        print(f"[tts-ws] Client disconnected for session {session_id[:8]}...")

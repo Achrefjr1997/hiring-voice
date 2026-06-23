@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Mic, MicOff, Bot, User, Target } from "lucide-react";
 import type { ParsedVoiceHireEvent } from "../types";
+import { useTTSStream } from "../hooks/useTTSStream";
 
 interface Turn {
   role: "interviewer" | "candidate";
@@ -12,10 +13,11 @@ interface VoiceInterfaceProps {
   events: ParsedVoiceHireEvent[];
   onAudioReady: (blob: Blob) => Promise<string | null>;
   sessionStatus: "idle" | "ready" | "active" | "ended";
+  sessionId: string | null;
   currentFocus?: { name: string; domain: string } | null;
 }
 
-export default function VoiceInterface({ events, onAudioReady, sessionStatus, currentFocus }: VoiceInterfaceProps) {
+export default function VoiceInterface({ events, onAudioReady, sessionStatus, sessionId, currentFocus }: VoiceInterfaceProps) {
   const [transcript, setTranscript] = useState<Turn[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const [aiSpeaking, setAiSpeaking] = useState(false);
@@ -26,6 +28,35 @@ export default function VoiceInterface({ events, onAudioReady, sessionStatus, cu
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isNearBottom, setIsNearBottom] = useState(true);
+
+  const ttsStream = useTTSStream(sessionId);
+  const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingSpeakTextRef = useRef<string | null>(null);
+
+  // Track previous TTS speaking state to detect transition
+  const prevTtsSpeakingRef = useRef(false);
+
+  // Cancel pending fallback timer when TTS stream starts handling the audio
+  useEffect(() => {
+    if (ttsStream.isSpeaking && ttsStream.currentText === pendingSpeakTextRef.current) {
+      if (fallbackTimerRef.current) {
+        clearTimeout(fallbackTimerRef.current);
+        fallbackTimerRef.current = null;
+      }
+      pendingSpeakTextRef.current = null;
+    }
+    // When TTS stream finishes playing, start recording
+    if (prevTtsSpeakingRef.current && !ttsStream.isSpeaking) {
+      // Cancel any pending HTTP fallback before auto-starting recording
+      if (fallbackTimerRef.current) {
+        clearTimeout(fallbackTimerRef.current);
+        fallbackTimerRef.current = null;
+      }
+      pendingSpeakTextRef.current = null;
+      startRecording();
+    }
+    prevTtsSpeakingRef.current = ttsStream.isSpeaking;
+  }, [ttsStream.isSpeaking, ttsStream.currentText]);
 
   const handleScroll = useCallback(() => {
     const el = containerRef.current;
@@ -49,7 +80,20 @@ export default function VoiceInterface({ events, onAudioReady, sessionStatus, cu
       if (typeof payload === "string" || !payload?.audioUrl) return;
       const isFiller = payload.isFiller === true || payload.model === "kokoro";
       setTranscript((t) => [...t, { role: "interviewer" as const, text: payload.text, isFiller }]);
+
+      // If recording already active, TTS already finished playing — don't disrupt
+      if (!isFiller && recordingRef.current) {
+        return;
+      }
+
       setAiSpeaking(true);
+
+      // Clear pending fallback from previous SPEAK
+      if (fallbackTimerRef.current) {
+        clearTimeout(fallbackTimerRef.current);
+        fallbackTimerRef.current = null;
+      }
+      pendingSpeakTextRef.current = null;
 
       if (!isFiller && fillerRef.current) {
         fillerRef.current.pause();
@@ -58,17 +102,36 @@ export default function VoiceInterface({ events, onAudioReady, sessionStatus, cu
       }
 
       if (payload.audioUrl) {
-        const audio = new Audio(payload.audioUrl);
-        audio.crossOrigin = "anonymous";
-        audio.onended = () => {
+        if (isFiller) {
+          // Filler: play immediately via HTTP
+          const audio = new Audio(payload.audioUrl);
+          audio.crossOrigin = "anonymous";
+          audio.play().catch(() => {});
+          fillerRef.current = audio;
+        } else if (ttsStream.isSpeaking && ttsStream.currentText === payload.text) {
+          // TTS stream is already handling this probe — no HTTP fallback needed
+        } else {
+          // Debounce HTTP fallback: TTS WS may deliver first chunk momentarily
+          pendingSpeakTextRef.current = payload.text;
+          fallbackTimerRef.current = setTimeout(() => {
+            pendingSpeakTextRef.current = null;
+            const audio = new Audio(payload.audioUrl);
+            audio.crossOrigin = "anonymous";
+            audio.onended = () => {
+              setAiSpeaking(false);
+              if (!isFiller) startRecording();
+            };
+            audio.onerror = () => setAiSpeaking(false);
+            audio.play().catch(() => setAiSpeaking(false));
+            currentAudioRef.current = audio;
+          }, 1000);
+        }
+      } else {
+        // No audio to play — start recording after brief transcript display
+        setTimeout(() => {
           setAiSpeaking(false);
           if (!isFiller) startRecording();
-        };
-        audio.onerror = () => setAiSpeaking(false);
-        audio.play().catch(() => setAiSpeaking(false));
-        currentAudioRef.current = audio;
-      } else {
-        setTimeout(() => setAiSpeaking(false), 1000);
+        }, 1000);
       }
     }
 
@@ -80,9 +143,23 @@ export default function VoiceInterface({ events, onAudioReady, sessionStatus, cu
     }
   }, [events[0]?.bandMessageId]);
 
+  // Cleanup fallback timer on unmount
+  useEffect(() => {
+    return () => {
+      if (fallbackTimerRef.current) {
+        clearTimeout(fallbackTimerRef.current);
+      }
+      if (currentAudioRef.current) {
+        currentAudioRef.current.pause();
+        currentAudioRef.current = null;
+      }
+    };
+  }, []);
+
   const startRecording = async () => {
     if (recordingRef.current) return;
     recordingRef.current = true;
+    setAiSpeaking(false);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const recorder = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
@@ -96,10 +173,15 @@ export default function VoiceInterface({ events, onAudioReady, sessionStatus, cu
         const blob = new Blob(chunks, { type: "audio/webm;codecs=opus" });
         try {
           const fillerUrl = await onAudioReady(blob);
-          if (fillerUrl) {
+          // Only play filler if probe hasn't already arrived
+          if (fillerUrl && !currentAudioRef.current) {
             const audio = new Audio(fillerUrl);
             audio.crossOrigin = "anonymous";
-            audio.play().catch(() => {});
+            setAiSpeaking(true);
+            audio.onended = () => {
+              if (!currentAudioRef.current) setAiSpeaking(false);
+            };
+            audio.play().catch(() => setAiSpeaking(false));
             fillerRef.current = audio;
           }
         } catch (e) {

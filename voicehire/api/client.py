@@ -35,10 +35,11 @@ MODELS = {
     "rubric":          "deepseek/deepseek-v4-pro",
     "probe":           "alibaba/qwen3-32b",
     "tech_evidence":   "gpt-4o-mini",
-    "coverage_update": "Qwen/Qwen2.5-72B-Instruct-Turbo",
-    "committee":       "alibaba/qwen3-235b-a22b-thinking-2507",    "tts_probe":       "elevenlabs/eleven_turbo_v2_5",
+    "coverage_update": "gpt-4o-mini",
+    "committee":       "alibaba/qwen3-235b-a22b-thinking-2507",
+    "tts_probe":       "elevenlabs/eleven_turbo_v2_5",
     "tts_filler":      "openai/tts-1",
     # Featherless AI
     "skeptic":         "deepseek-ai/DeepSeek-R1-0528",
-    "behav_evidence":  "mistralai/Mistral-7B-Instruct-v0.3",
+    "behav_evidence":  "Qwen/Qwen2.5-7B-Instruct",
 }

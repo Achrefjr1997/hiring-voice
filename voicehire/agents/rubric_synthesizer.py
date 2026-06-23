@@ -80,7 +80,7 @@ class RubricSynthesizer(BandAgent):
         self.brain_id = brain_id
 
     async def handle_mention(self, room_id: str, message: dict) -> None:
-        content = message["content"]
+        content = message.get("content", "")
         jd     = self._extract_section(content, "JD:")
         resume = self._extract_section(content, "RESUME:")
         rubric = self._extract_section(content, "RUBRIC:")

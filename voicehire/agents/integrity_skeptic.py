@@ -28,7 +28,7 @@ class IntegritySkeptic(BandAgent):
         self.brain_id = brain_id
 
     async def handle_mention(self, room_id: str, message: dict) -> None:
-        content = message["content"]
+        content = message.get("content", "")
         if "EVALUATE:" not in content:
             return
         evidence_json = content.split("EVALUATE:", 1)[1].strip()

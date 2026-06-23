@@ -32,17 +32,21 @@ class HiringCommittee(BandAgent):
         )
         self.client = AIMLAPIClient()
         self.brain_id = brain_id
-        self._evidence_nodes: list[dict] = []
+        self._evidence_nodes: dict[str, list[dict]] = {}
+
+    def _sid(self, room_id: str) -> str:
+        return ROOM_TO_SESSION.get(room_id, "")
 
     async def handle_mention(self, room_id: str, message: dict) -> None:
-        content = message["content"]
+        content = message.get("content", "")
+        sid = self._sid(room_id)
         if "EVIDENCE:" in content:
             ev_json = content.split("EVIDENCE:", 1)[1].strip()
-            self._evidence_nodes.append(json.loads(ev_json))
+            self._evidence_nodes.setdefault(sid, []).append(json.loads(ev_json))
         elif "SESSION_END:" in content:
             payload = json.loads(content.split("SESSION_END:", 1)[1].strip())
             portfolio = {
-                "nodes": self._evidence_nodes,
+                "nodes": self._evidence_nodes.get(sid, []),
                 "coverageSummary": payload.get("coverageSummary", {}),
             }
             await self._deliberate(room_id, portfolio)

@@ -213,14 +213,21 @@ class BandEventListener:
         except Exception as e:
             print(f"[event-listener] Error handling message: {e}")
 
-    async def _handle_agent_mention(self, agent: object, room_id: str, payload: dict) -> None:
+    async def _handle_agent_mention(self, agent: object, room_id: str, payload: dict, message_id: str | None = None) -> None:
         try:
+            if message_id and hasattr(agent, 'mark_processing'):
+                await agent.mark_processing(room_id, message_id)
             await agent.handle_mention(room_id, payload)
+            if message_id and hasattr(agent, 'mark_processed'):
+                await agent.mark_processed(room_id, message_id)
         except Exception as e:
+            if message_id and hasattr(agent, 'mark_failed'):
+                await agent.mark_failed(room_id, message_id, str(e))
             print(f"[event-listener] Agent {getattr(agent, 'handle', '?')} raised: {e}")
 
 
     async def _route_message(self, room_id: str | None, payload: dict, content: str) -> None:
+        message_id = payload.get("id")
         metadata = payload.get("metadata", {})
         mentions = metadata.get("mentions", [])
         # Relay to frontend first (non-blocking for UI), then fire-and-forget agent
@@ -231,7 +238,7 @@ class BandEventListener:
             agent = self.registry.get_by_uuid(mention_id)
             if agent and hasattr(agent, "handle_mention"):
                 print(f"[event-listener] Routing @mention to {agent.handle}")
-                asyncio.create_task(self._handle_agent_mention(agent, room_id or "", payload))
+                asyncio.create_task(self._handle_agent_mention(agent, room_id or "", payload, message_id))
                 return
 
     async def _route_event(self, room_id: str | None, content: str) -> None:

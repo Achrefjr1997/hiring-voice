@@ -63,6 +63,30 @@ class BandAgent(ABC):
             messages = r.json().get("messages", [])
         return messages
 
+    async def mark_processing(self, room_id: str, message_id: str) -> None:
+        try:
+            await self._http.post(f"/agent/chats/{room_id}/messages/{message_id}/processing")
+            print(f"[{self.handle}] Marked message {message_id[:8]}... as processing")
+        except Exception as e:
+            print(f"[{self.handle}] Failed to mark processing for {message_id[:8]}...: {e}")
+
+    async def mark_processed(self, room_id: str, message_id: str) -> None:
+        try:
+            await self._http.post(f"/agent/chats/{room_id}/messages/{message_id}/processed")
+            print(f"[{self.handle}] Marked message {message_id[:8]}... as processed")
+        except Exception as e:
+            print(f"[{self.handle}] Failed to mark processed for {message_id[:8]}...: {e}")
+
+    async def mark_failed(self, room_id: str, message_id: str, error: str) -> None:
+        try:
+            await self._http.post(
+                f"/agent/chats/{room_id}/messages/{message_id}/failed",
+                json={"error": error},
+            )
+            print(f"[{self.handle}] Marked message {message_id[:8]}... as failed: {error}")
+        except Exception as e:
+            print(f"[{self.handle}] Failed to mark failed for {message_id[:8]}...: {e}")
+
     async def close(self):
         await self._http.aclose()
 

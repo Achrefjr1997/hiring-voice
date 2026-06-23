@@ -306,7 +306,7 @@ flowchart LR
 
 | Responsibility | Implementation |
 |---|---|
-| CoverageMap management | Pure Python `CoverageMap` class (deterministic, no LLM). Tracks which competencies are COVERED, UNEXPLORED, EXHAUSTED, INSUFFICIENT. |
+| CoverageMap management | Core `CoverageMap` class is pure Python (deterministic). Challenge adjudication from Integrity Skeptic calls `gpt-4o-mini` via `MODELS["coverage_update"]` with fallback to deterministic adjustment. Tracks COVERED, UNEXPLORED, EXHAUSTED, INSUFFICIENT. |
 | Probe generation | Calls Qwen3 32B with conversation history + current target competency. Returns `{probeText, rationale, expectedSignals, competencyTargeted}`. |
 | State machine | Idempotency guard (`if self.coverage_map: return`). Routes incoming messages by prefix (`EVIDENCE:`, `CHALLENGE:`, `UTTERANCE:`, `SESSION_END`). |
 

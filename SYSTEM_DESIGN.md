@@ -103,7 +103,7 @@ VoiceHire is an **AI-powered automated interviewing platform** that conducts com
 **1. Clone the repository:**
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/Achrefjr1997/hiring-voice.git
 cd voicehire
 ```
 

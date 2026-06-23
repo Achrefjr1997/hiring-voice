@@ -73,8 +73,8 @@ VoiceHire is an **AI-powered automated interviewing platform** that conducts com
 | Service | Purpose | Auth Method |
 |---------|---------|------------|
 | AI/ML API | Premium LLM (DeepSeek V4 Pro, Qwen3, gpt-4o-mini) | `Authorization: Bearer` |
-| Featherless AI | Flat-rate open-weight models (DeepSeek R1, Mistral 7B) | `Authorization: Bearer` |
-| Deepgram | STT (nova-2) + TTS (aura-2) | `Authorization: Token` |
+| Featherless AI | Flat-rate open-weight models (DeepSeek R1, Qwen2.5-7B-Instruct) | `Authorization: Bearer` |
+| Deepgram | STT (nova-2) + TTS (aura-2-jupiter-en probes, aura-2-thalia-en fillers) | `Authorization: Token` |
 | Band.ai | Multi-agent chat rooms + Phoenix Channels WebSocket | `X-API-Key` header |
 
 ### 2.4 Infrastructure
@@ -167,8 +167,8 @@ cd frontend && npm run dev
 
 ```bash
 docker-compose up --build
-# Backend: http://localhost:8000
-# Frontend: http://localhost:5173
+# Backend: http://localhost:8000 (internal)
+# Frontend: http://localhost (nginx on port 80)
 ```
 
 ### 3.4 Running Tests
@@ -206,7 +206,7 @@ flowchart TB
     SB["Session Brain<br/>Qwen3 32B"]
     RS["Rubric Synthesizer<br/>DeepSeek V4 Pro"]
     VP["Voice Persona"]
-    EC["Evidence Chain<br/>gpt-4o-mini + Mistral 7B"]
+    EC["Evidence Chain<br/>gpt-4o-mini + Qwen2.5-7B-Instruct"]
     IS["Integrity Skeptic<br/>DeepSeek R1"]
     HC["Hiring Committee<br/>Qwen3 235B"]
   end
@@ -283,7 +283,7 @@ flowchart LR
 
   subgraph EXPLORATION["Exploration Room"]
     VP[("Voice Persona<br/>TTS + Tone Control")]
-    EC[("Evidence Chain<br/>gpt-4o-mini + Mistral 7B")]
+    EC[("Evidence Chain<br/>gpt-4o-mini + Qwen2.5-7B-Instruct")]
     IS[("Integrity Skeptic<br/>DeepSeek R1")]
   end
 
@@ -323,13 +323,13 @@ flowchart LR
 
 **File:** `voicehire/agents/rubric_synthesizer.py`
 
-#### Evidence Chain (gpt-4o-mini + Mistral 7B)
+#### Evidence Chain (gpt-4o-mini + Qwen2.5-7B-Instruct)
 
 **Role:** Extracts behavioral evidence from candidate utterances in real-time.
 
 | Responsibility | Implementation |
 |---|---|
-| Parallel extraction | `asyncio.gather` on two models simultaneously: tech (AI/ML API gpt-4o-mini) + behavioral (Featherless Mistral 7B). |
+| Parallel extraction | `asyncio.gather` on two models simultaneously: tech (AI/ML API gpt-4o-mini) + behavioral (Featherless Qwen2.5-7B-Instruct). |
 | Evidence merging | Combines both extractions into a single `EvidenceNode` with competencies_tagged, behavioral_tags, extracted_signals, confidence scores. |
 | Output | Sends `EVIDENCE: <json>` to Session Brain and `EVALUATE: <json>` to Integrity Skeptic. |
 
@@ -353,7 +353,7 @@ flowchart LR
 
 | Responsibility | Implementation |
 |---|---|
-| Probe delivery | Receives `SPEAK: <probeText>` from Session Brain. Sends text to Deepgram TTS (aura-2-apollo-en). Posts audio URL + transcript to room. |
+| Probe delivery | Receives `SPEAK: <probeText>` from Session Brain. Sends text to Deepgram TTS (aura-2-jupiter-en), streams chunks to frontend via `/ws/tts/{session_id}` AND dual-writes to `audio_output/*.mp3` for Evidence Portfolio. Posts audio URL + transcript to room. |
 | Filler pre-generation | At server startup, `prefetch_fillers()` generates 5 filler audio files (thinking pauses, acknowledgments) via `asyncio.gather`. Stored in `audio_output/filler_*.mp3`. |
 | Tone consistency | Prompt template defines persona: professional, encouraging, never interrupting. |
 
@@ -390,8 +390,15 @@ BandAgent (ABC)
 │     -> POST /agent/chats/{room_id}/events (broadcast, no mentions)
 ├── list_messages(room_id, limit=50)
 │     -> GET /agent/chats/{room_id}/messages
+├── mark_processing(room_id, message_id)
+│     -> POST /agent/chats/{room_id}/messages/{message_id}/processing
+├── mark_processed(room_id, message_id)
+│     -> POST /agent/chats/{room_id}/messages/{message_id}/processed
+├── mark_failed(room_id, message_id, error)
+│     -> POST /agent/chats/{room_id}/messages/{message_id}/failed
 └── handle_mention(room_id, message)  [abstract]
       -> called by event_listener when @mentioned
+      -> automatically wrapped with mark_processing/mark_processed lifecycle
 ```
 
 **Critical Protocol Rule:** `send_to_agent()` requires the target agent's **UUID** (not handle string). Plain `@handle` text does NOT trigger Band's routing — the `mentions` array with UUID is mandatory.
@@ -413,6 +420,10 @@ erDiagram
     string id PK "uuid hex[:12]"
     string email UK
     string hashed_password
+    string auth_provider "default: email"
+    boolean email_verified "default: false"
+    string avatar_url "nullable"
+    string full_name "nullable"
     datetime created_at
   }
 
@@ -421,7 +432,7 @@ erDiagram
     string recruiter_id FK
     string candidate_name
     string candidate_email
-    string status "READY|active|completed|ENDED"
+    string status "READY|active|CANDIDATE_FINISHED|completed|ENDED"
     json enforcement_config
     boolean demo_mode
     text jd
@@ -451,6 +462,7 @@ erDiagram
 
   candidates {
     string id PK "uuid hex[:12]"
+    string recruiter_id FK "nullable"
     string first_name
     string last_name
     string email
@@ -517,21 +529,29 @@ The `events` table is the canonical record of everything that happened during an
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | POST | `/auth/register` | None | Register new recruiter (Form: email, password) |
-| POST | `/auth/login` | None | Login, returns JWT token |
+| POST | `/auth/login` | None | Login with email + password, returns JWT token |
+| GET | `/auth/google/login` | None | Redirect recruiter to Google OAuth consent screen |
+| GET | `/auth/google/callback` | None | Google OAuth callback — auto-provisions new users, redirects to frontend with JWT token |
 
 ### 7.2 Sessions
 
 | Method | Path | Auth | Description |
-|---|---|---|---|
+|---|---|---|---|---|
 | GET | `/sessions` | JWT | List sessions (paginated, filterable by date/status) |
 | POST | `/session/create` | JWT | Create interview session (Form: jd, resume, rubric, duration, job_id) |
 | GET | `/session/{id}` | None | Get active session status from in-memory store |
 | GET | `/session/{id}/history` | JWT | Full session history + events + report |
-| POST | `/session/{id}/end` | JWT | End session, trigger deliberation |
+| POST | `/session/{id}/end` | None | End session, trigger deliberation (no auth — called by candidate browser) |
 | POST | `/session/{id}/audio` | None | Upload audio chunk, returns filler audio URL |
 | GET | `/session/{id}/report` | None | Get interview report JSON |
 | GET | `/session/{id}/competencies` | None | Get competency coverage map |
 | GET | `/session/{id}/pdf` | None | Download interview report as PDF |
+| POST | `/session/{session_id}/candidate` | None | Set candidate name for the session |
+| POST | `/session/{session_id}/send-invite` | JWT | Send interview invite email to candidate |
+| POST | `/session/{session_id}/finish` | None | Candidate signals interview finished |
+| POST | `/session/{session_id}/integrity-violation` | None | Report integrity violation (tab switch, copy-paste) |
+| POST | `/session/{session_id}/integrity-resume` | None | Resume integrity monitoring after pause |
+| POST | `/session/{session_id}/integrity-terminate` | None | Terminate session due to integrity breach |
 
 ### 7.3 Candidates
 
@@ -566,6 +586,7 @@ The `events` table is the canonical record of everything that happened during an
 | Path | Auth | Description |
 |---|---|---|
 | `/ws/{session_id}` | None | Real-time relay from Band.ai -> frontend (events + messages) |
+| `/ws/tts/{session_id}` | None | Dedicated TTS audio streaming WebSocket. Protocol: `SPEAK_START` JSON frame → binary MP3 chunks → `SPEAK_END` JSON frame. Accumulated via `AudioContext.decodeAudioData()` and played through `SourceBuffer('audio/mpeg')`. |
 
 ### 7.7 Utility
 
@@ -621,7 +642,7 @@ sequenceDiagram
   API->>Band: POST CANDIDATE_UTTERANCE event
   API->>Band: POST @session-brain UTTERANCE event
 
-  Note over AI: gpt-4o-mini + Mistral 7B extract evidence
+  Note over AI: gpt-4o-mini + Qwen2.5-7B-Instruct extract evidence
   API->>Band: POST @session-brain EVIDENCE event
   API->>Band: POST @integrity-skeptic EVALUATE event
 
@@ -752,29 +773,42 @@ def _regex_fallback(self, text: str) -> dict:
 | TTS generation failure | HTTP error from Deepgram | Use pre-generated filler audio from cache. TTS failure does not block interview |
 | Audio format error | Deepgram returns error code | Log audio bytes for debugging, return error to frontend, candidate retries |
 
+**TTS Streaming Protocol & Dual-Write:**
+
+Voice Persona streams probe audio to the candidate via a dedicated WebSocket (`/ws/tts/{session_id}`) using the following protocol:
+
+1. `SPEAK_START` — JSON text frame with `{action: "SPEAK_START", probeId, transcript}`
+2. Binary MP3 chunks — each chunk is forwarded from Deepgram's TTS stream to the frontend
+3. `SPEAK_END` — JSON text frame with `{action: "SPEAK_END", audioFile: "..."}`
+
+Every chunk is **dual-written**: simultaneously forwarded to the frontend WebSocket AND saved to `audio_output/*.mp3` for Evidence Portfolio replay. The `update_probe_audio_url()` method links the file path into `conversation_history`.
+
+If the TTS WebSocket is unavailable or drops, `VoiceInterface.tsx` falls back to HTTP `<audio>` playback using the pre-generated audio URL with a 1-second debounce (fallbackTimerRef).
+
 ### 10.4 Frontend Resilience
 
 | Failure Mode | Detection | Response |
-|---|---|---|
-| WebSocket disconnect | `onclose` event | Auto-reconnect: exponential backoff starting at 1s -> 2s -> 4s -> 8s -> 16s, max 5 retries. Shows "Reconnecting..." indicator |
+|---|---|---|---|
+| WebSocket disconnect | `onclose` event | Auto-reconnect with 2s constant delay, max 5 retries. Shows "Reconnecting..." indicator |
 | Audio upload failure | HTTP error from POST /session/{id}/audio | Retry once after 2s. If still fails, show error toast, allow candidate to re-record |
 | State desync | Missing expected event sequence | `useBandSession` hook validates event order; if out-of-sequence, re-fetches session state from API |
+| TTS WebSocket stream drop | No `AUDIO_STREAM start` within 1s of SPEAK event | Fallback to HTTP `<audio>` playback via `new Audio(audioUrl)` with 1s debounce |
 
 **Frontend reconnection logic:**
 
 ```typescript
 // frontend/src/hooks/useBandSession.ts
-const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 16000];
+const RECONNECT_DELAY = 2000; // constant 2s delay
 
 async function connectWithRetry(sessionId: string, attempt = 0) {
-  if (attempt >= RECONNECT_DELAYS.length) {
+  if (attempt >= 5) {
     setState({ connected: false, error: "Max reconnection attempts reached" });
     return;
   }
   try {
     await connect(sessionId);
   } catch {
-    await sleep(RECONNECT_DELAYS[attempt]);
+    await sleep(RECONNECT_DELAY);
     connectWithRetry(sessionId, attempt + 1);
   }
 }
@@ -837,14 +871,18 @@ The frontend Nginx proxies specific API paths to the backend container:
 
 ```nginx
 # /frontend/nginx.conf
+# SPA root — fallback to index.html for client-side routing
+location / { try_files $uri $uri/ /index.html; }
+# API proxy blocks
 location /sessions { proxy_pass http://backend:8000; }
 location /session/ { proxy_pass http://backend:8000; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade"; }
 location /auth/ { proxy_pass http://backend:8000; }
 location /audio/ { proxy_pass http://backend:8000; }
-location /ws { proxy_pass http://backend:8000; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade"; }
+location /ws/ { proxy_pass http://backend:8000; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade"; proxy_read_timeout 3600; }
+location /upload { proxy_pass http://backend:8000; client_max_body_size 20m; }
 location /health { proxy_pass http://backend:8000; }
 location /candidates { proxy_pass http://backend:8000; }
-location /candidate { proxy_pass http://backend:8000; }
+location /candidate/ { proxy_pass http://backend:8000; client_max_body_size 20m; }
 location /jobs { proxy_pass http://backend:8000; }
 location /stats { proxy_pass http://backend:8000; }
 ```
@@ -879,4 +917,4 @@ services:
 
 *VoiceHire — System Design & Architecture*
 *Band of Agents Hackathon 2026 · AI/ML API + Featherless AI + Deepgram + Band.ai*
-*Every section verified against source code — June 2026*
+*Verified against source code — June 2026*

@@ -430,14 +430,15 @@ export default function CandidateRoom() {
 
   return (
     <>
-      <div className="fixed top-0 left-0 right-0 z-40 bg-[#F5F2EB] border-b border-border-cream px-6 py-3 flex items-center justify-between">
+      <div className="fixed top-0 left-0 right-0 z-40 bg-[#F5F2EB] border-b border-border-cream px-4 lg:px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Logo size="xs" withText textPosition="right" />
-          <div className="border-l border-border-cream pl-4">
-            <p className="text-[15px] font-semibold text-text-inverted">
+          <Logo size="xs" withText textPosition="right" className="hidden sm:flex" />
+          <Logo size="xs" className="sm:hidden" />
+          <div className="border-l border-border-cream pl-3 lg:pl-4 min-w-0">
+            <p className="text-[13px] sm:text-[15px] font-semibold text-text-inverted truncate">
               {sessionInfo?.title || `${sessionId?.slice(0, 8) ?? "Interview"}`}
             </p>
-            <p className="text-caption text-text-muted">
+            <p className="text-caption text-text-muted hidden sm:block">
               {sessionInfo?.title ? `Session: ${sessionId?.slice(0, 8)}` : ""}
             </p>
           </div>
@@ -451,7 +452,7 @@ export default function CandidateRoom() {
         </button>
       </div>
 
-      <div className="flex flex-col items-center justify-center min-h-screen p-4 pt-20 relative">
+      <div className="flex flex-col items-center justify-center min-h-screen p-4 md:p-6 pt-20 relative">
         {state.integrityPaused && (
           <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
             <div className="bg-surface-default rounded-radius-card shadow-xl max-w-md p-8 text-center border border-border-default">

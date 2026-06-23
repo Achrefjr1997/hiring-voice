@@ -52,6 +52,7 @@ export default function SessionHistoryList({
         </div>
       ) : (
         <div className="bg-surface-default border border-border-default rounded-radius-card overflow-hidden">
+          <div className="overflow-x-auto">
           <table className="w-full text-body">
             <thead>
               <tr className="border-b border-border-default text-caption text-text-muted uppercase tracking-wide">
@@ -106,6 +107,7 @@ export default function SessionHistoryList({
               })}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>

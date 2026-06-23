@@ -149,7 +149,7 @@ export default function RecruiterDashboard() {
           <>
             {view === "history" && (
               <>
-                <div className="h-14 border-b border-border-default flex items-center justify-between px-8 shrink-0">
+                <div className="h-14 border-b border-border-default flex items-center justify-between px-4 lg:px-8 shrink-0">
                   <h1 className="text-body font-semibold text-text-primary">Recent Interviews</h1>
                   <button
                     onClick={() => setView("setup")}
@@ -158,7 +158,7 @@ export default function RecruiterDashboard() {
                     + New Interview
                   </button>
                 </div>
-                <div className="flex-1 overflow-y-auto p-8 space-y-6">
+                <div className="flex-1 overflow-y-auto p-4 lg:p-8 space-y-6">
 
                   {activeSessionIds.length > 0 && (
                     <div>
@@ -220,7 +220,7 @@ export default function RecruiterDashboard() {
 
             {view === "setup" && (
               <>
-                <div className="h-14 border-b border-border-default flex items-center gap-4 px-8 shrink-0">
+                <div className="h-14 border-b border-border-default flex items-center gap-4 px-4 lg:px-8 shrink-0">
                   <button
                     onClick={() => setView("history")}
                     className="text-caption text-accent-gold hover:text-accent-gold/80 transition-colors"
@@ -229,7 +229,7 @@ export default function RecruiterDashboard() {
                   </button>
                   <h1 className="text-body font-semibold text-text-primary">New Interview</h1>
                 </div>
-                <div className="flex-1 overflow-y-auto p-8">
+                <div className="flex-1 overflow-y-auto p-4 lg:p-8">
                   <div className="max-w-2xl mx-auto">
                     <SessionSetup onSubmit={handleSessionCreate} loading={loading} prefillResume={prefillResume} prefillEmail={prefillEmail} />
                   </div>
@@ -240,7 +240,7 @@ export default function RecruiterDashboard() {
             {view === "live" && state && (
               <>
                 {/* Status bar */}
-                <div className="flex items-center gap-5 px-6 py-3.5 border-b border-border-default bg-gradient-to-r from-surface-default to-surface-raised shrink-0">
+                <div className="flex items-center gap-5 px-4 lg:px-6 py-3.5 border-b border-border-default bg-gradient-to-r from-surface-default to-surface-raised shrink-0 flex-wrap">
                   <button
                     onClick={handleBackToDashboard}
                     className="text-caption text-accent-gold hover:text-accent-gold/80 transition-colors mr-2"
@@ -315,7 +315,7 @@ export default function RecruiterDashboard() {
                 )}
 
                 {/* Main grid */}
-                <div className="flex-1 flex gap-4 p-4 overflow-hidden">
+                <div className="flex-1 flex flex-col lg:flex-row gap-4 p-4 overflow-hidden">
                   <div className="flex-1 flex flex-col gap-4 min-w-0">
                     <div className="bg-surface-default border border-border-default rounded-radius-card flex-1 flex flex-col overflow-hidden">
                       <div className="flex items-center justify-between px-4 py-2.5 border-b border-border-default">
@@ -335,7 +335,7 @@ export default function RecruiterDashboard() {
                     </div>
                   </div>
 
-                  <div className="w-[380px] shrink-0 flex flex-col gap-3 overflow-y-auto">
+                  <div className="w-full lg:w-[380px] shrink-0 flex flex-col gap-3 overflow-y-auto">
                     <div className="bg-surface-default border border-border-default rounded-radius-card overflow-hidden">
                       <button
                         onClick={() => togglePanel("competency")}
@@ -423,7 +423,7 @@ export default function RecruiterDashboard() {
         {/* ────────── CANDIDATES & CVs VIEW ────────── */}
         {activeView === "candidates" && (
           <>
-            <div className="h-14 border-b border-border-default flex items-center px-8 shrink-0">
+            <div className="h-14 border-b border-border-default flex items-center px-4 lg:px-8 shrink-0">
               <h1 className="text-body font-semibold text-text-primary">Candidate Database</h1>
             </div>
             <div className="flex-1 overflow-y-auto">
@@ -435,7 +435,7 @@ export default function RecruiterDashboard() {
         {/* ────────── ACTIVE RECRUITMENTS VIEW ────────── */}
         {activeView === "recruitments" && (
           <>
-            <div className="h-14 border-b border-border-default flex items-center justify-between px-8 shrink-0">
+            <div className="h-14 border-b border-border-default flex items-center justify-between px-4 lg:px-8 shrink-0">
               <h1 className="text-body font-semibold text-text-primary">Active Recruitments</h1>
               <button onClick={() => setShowCreateJob(true)} className="bg-accent-gold text-bg-primary text-caption font-semibold px-5 py-2 rounded-radius-input hover:brightness-110 transition-all">
                 + Create Job
@@ -455,7 +455,7 @@ export default function RecruiterDashboard() {
         {/* ────────── ANALYTICS VIEW ────────── */}
         {activeView === "analytics" && (
           <>
-            <div className="h-14 border-b border-border-default flex items-center px-8 shrink-0">
+            <div className="h-14 border-b border-border-default flex items-center px-4 lg:px-8 shrink-0">
               <h1 className="text-body font-semibold text-text-primary">Analytics</h1>
             </div>
             <AnalyticsView />

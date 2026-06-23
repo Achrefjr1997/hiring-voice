@@ -11,6 +11,9 @@ interface SidebarContextValue {
   setPrefillEmail: (email: string) => void;
   navigateToView: "setup" | null;
   setNavigateToView: (v: "setup" | null) => void;
+  sidebarOpen: boolean;
+  toggleSidebar: () => void;
+  closeSidebar: () => void;
 }
 
 const SidebarContext = createContext<SidebarContextValue | null>(null);
@@ -20,8 +23,11 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
   const [prefillResume, setPrefillResume] = useState("");
   const [prefillEmail, setPrefillEmail] = useState("");
   const [navigateToView, setNavigateToView] = useState<"setup" | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const toggleSidebar = () => setSidebarOpen((v) => !v);
+  const closeSidebar = () => setSidebarOpen(false);
   return (
-    <SidebarContext.Provider value={{ activeView, setActiveView, prefillResume, setPrefillResume, prefillEmail, setPrefillEmail, navigateToView, setNavigateToView }}>
+    <SidebarContext.Provider value={{ activeView, setActiveView, prefillResume, setPrefillResume, prefillEmail, setPrefillEmail, navigateToView, setNavigateToView, sidebarOpen, toggleSidebar, closeSidebar }}>
       {children}
     </SidebarContext.Provider>
   );

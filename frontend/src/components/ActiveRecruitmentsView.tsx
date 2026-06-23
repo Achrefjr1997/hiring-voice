@@ -106,7 +106,7 @@ export default function ActiveRecruitmentsView() {
 
   return (
     <>
-      <div className="flex gap-1 px-8 border-b border-border-default bg-surface-raised">
+      <div className="flex gap-1 px-4 lg:px-8 border-b border-border-default bg-surface-raised overflow-x-auto">
         {TABS.map((tab) => (
           <button
             key={tab.id}
@@ -124,12 +124,12 @@ export default function ActiveRecruitmentsView() {
       </div>
 
       {error && (
-        <div className="mx-8 mt-4 px-4 py-3 rounded-radius-card bg-status-alert/10 border border-status-alert/30 text-caption text-status-alert">
+        <div className="mx-4 lg:mx-8 mt-4 px-4 py-3 rounded-radius-card bg-status-alert/10 border border-status-alert/30 text-caption text-status-alert">
           {error}
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto p-8">
+      <div className="flex-1 overflow-y-auto p-4 lg:p-8">
         {loading ? (
           <div className="flex items-center justify-center py-16">
             <p className="text-caption text-text-muted">Loading jobs…</p>
@@ -141,7 +141,7 @@ export default function ActiveRecruitmentsView() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             {jobs.map((job) => {
               const cfg = STATUS_CONFIG[job.status] || STATUS_CONFIG.draft;
               const deadline = formatDeadline(job.deadline);

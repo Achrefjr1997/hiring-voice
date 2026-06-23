@@ -1,6 +1,7 @@
 import { useAuth } from "./AuthProvider";
 import { useNavigate } from "react-router-dom";
-import { History, Users, Briefcase, BarChart3 } from "lucide-react";
+import { useSidebar } from "./SidebarContext";
+import { History, Users, Briefcase, BarChart3, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 type SidebarView = "interviews" | "candidates" | "recruitments" | "analytics";
@@ -20,6 +21,7 @@ const NAV_ITEMS: { id: SidebarView; label: string; icon: LucideIcon }[] = [
 export default function RecruiterSidebar({ activeView, onViewChange }: Props) {
   const { email, logout } = useAuth();
   const navigate = useNavigate();
+  const { sidebarOpen, closeSidebar } = useSidebar();
 
   const initials = email
     ? email
@@ -31,8 +33,13 @@ export default function RecruiterSidebar({ activeView, onViewChange }: Props) {
         .slice(0, 2)
     : "?";
 
-  return (
-    <aside className="w-[250px] min-w-[250px] bg-[#0A0A0A] border-r border-border-default flex flex-col h-full">
+  const handleViewChange = (view: SidebarView) => {
+    onViewChange(view);
+    closeSidebar();
+  };
+
+  const sidebarContent = (
+    <>
       <nav className="flex-1 py-4 pt-6">
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
@@ -40,7 +47,7 @@ export default function RecruiterSidebar({ activeView, onViewChange }: Props) {
           return (
             <button
               key={item.id}
-              onClick={() => onViewChange(item.id)}
+              onClick={() => handleViewChange(item.id)}
               className={
                 "w-full flex items-center gap-3 px-6 py-3 text-sm transition-all duration-150 border-l-2 text-left " +
                 (isActive
@@ -80,6 +87,33 @@ export default function RecruiterSidebar({ activeView, onViewChange }: Props) {
           </button>
         </div>
       </div>
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      {/* Desktop sidebar */}
+      <aside className="hidden lg:flex w-[250px] min-w-[250px] bg-[#0A0A0A] border-r border-border-default flex-col h-full">
+        {sidebarContent}
+      </aside>
+
+      {/* Mobile drawer overlay */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden" onClick={closeSidebar}>
+          <div className="absolute inset-0 bg-black/60" />
+          <aside
+            className="relative w-[280px] bg-[#0A0A0A] border-r border-border-default flex flex-col h-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-end px-4 pt-4 pb-2">
+              <button onClick={closeSidebar} className="text-gray-400 hover:text-white p-1">
+                <X size={20} />
+              </button>
+            </div>
+            {sidebarContent}
+          </aside>
+        </div>
+      )}
+    </>
   );
 }

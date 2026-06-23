@@ -273,7 +273,7 @@ export default function ReportPage() {
   }
 
   return (
-    <div className="flex-1 py-8 px-8 space-y-10 overflow-y-auto">
+    <div className="flex-1 py-4 lg:py-8 px-4 sm:px-6 lg:px-8 space-y-10 overflow-y-auto">
       {/* Back button */}
       <button
         onClick={() => navigate(-1)}
@@ -531,7 +531,7 @@ export default function ReportPage() {
                                 </p>
                               )}
                               {isCandidate && entry.audio_url && (
-                                <audio controls src={entry.audio_url} className="mt-1.5 w-full h-8" />
+                                <audio controls src={entry.audio_url} className="mt-1.5 w-full h-8 max-w-full" />
                               )}
                             </div>
                           </div>
@@ -552,7 +552,7 @@ export default function ReportPage() {
             <p className="text-caption text-text-muted italic">Deliberation text not available.</p>
           ) : (
             <div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {/* Advocate */}
                 <div className="rounded-lg p-3" style={{ border: "1px solid var(--color-border-default)", backgroundColor: "var(--color-surface-default)" }}>
                   <div className="flex items-center gap-1.5 mb-2">
@@ -685,7 +685,7 @@ export default function ReportPage() {
         {/* ───── Section 7: Session Metadata ───── */}
         <section id="session-metadata">
           <h2 className="text-caption font-medium text-text-secondary uppercase tracking-wide mb-3">Session Metadata</h2>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <div className="rounded-md px-3 py-2.5" style={{ backgroundColor: "var(--color-surface-raised)" }}>
               <p className="text-[11px] text-text-muted">Session ID</p>
               <p className="text-[13px] font-medium font-mono text-text-primary">{sessionId}</p>

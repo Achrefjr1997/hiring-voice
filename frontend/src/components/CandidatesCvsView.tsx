@@ -263,7 +263,7 @@ export default function CandidatesCvsView() {
         onChange={handleFileSelect}
       />
 
-      <div className="px-8 py-4 flex items-center gap-3">
+      <div className="px-4 lg:px-8 py-4 flex items-center gap-3">
         <input
           type="text"
           placeholder="Search by name, email, skills..."
@@ -286,7 +286,7 @@ export default function CandidatesCvsView() {
         </div>
       )}
 
-      <div className="px-8 pb-8 flex-1 overflow-y-auto">
+      <div className="px-4 lg:px-8 pb-8 flex-1 overflow-y-auto">
         {loading ? (
           <div className="flex items-center justify-center py-16">
             <p className="text-caption text-text-muted">Loading candidates…</p>
@@ -299,6 +299,7 @@ export default function CandidatesCvsView() {
           </div>
         ) : (
           <div className="bg-surface-default border border-border-default rounded-radius-card overflow-hidden">
+            <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border-default">
@@ -351,6 +352,7 @@ export default function CandidatesCvsView() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </div>

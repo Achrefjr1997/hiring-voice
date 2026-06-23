@@ -278,7 +278,7 @@ export default function ReportView({ sessionId, decision, deliberationFullText, 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={onClose}>
       <div
-        className="flex flex-col max-w-[860px] w-full max-h-[90vh] bg-white rounded-lg border-[0.5px] border-gray-200 shadow-xl overflow-hidden"
+        className="flex flex-col max-w-[860px] w-[95vw] max-h-[90vh] bg-white rounded-lg border-[0.5px] border-gray-200 shadow-xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -296,7 +296,7 @@ export default function ReportView({ sessionId, decision, deliberationFullText, 
         {/* Body */}
         <div className="flex flex-1 overflow-hidden">
           {/* Sidebar */}
-          <nav className="w-[180px] flex-shrink-0 border-r border-gray-100 p-4 overflow-hidden">
+          <nav className="hidden lg:block w-[180px] flex-shrink-0 border-r border-gray-100 p-4 overflow-hidden">
             <ul className="space-y-2">
               {SECTION_NAV.map((item) => (
                 <li key={item.id}>
@@ -320,7 +320,7 @@ export default function ReportView({ sessionId, decision, deliberationFullText, 
           </nav>
 
           {/* Scrollable Content */}
-          <div ref={contentRef} className="flex-1 overflow-y-auto px-6 py-6 space-y-10">
+          <div ref={contentRef} className="flex-1 overflow-y-auto px-4 lg:px-6 py-6 space-y-10">
 
             {/* ───── Section 1: Executive Summary ───── */}
             <section id="executive-summary">
@@ -603,7 +603,7 @@ export default function ReportView({ sessionId, decision, deliberationFullText, 
                                     </p>
                                   )}
                                   {isCandidate && entry.audio_url && (
-                                    <audio controls src={entry.audio_url} className="mt-1.5 w-full h-8" />
+                                    <audio controls src={entry.audio_url} className="mt-1.5 w-full h-8 max-w-full" />
                                   )}
                                 </div>
                               </div>
@@ -631,7 +631,7 @@ export default function ReportView({ sessionId, decision, deliberationFullText, 
                 </div>
               ) : (
                 <div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     {/* Advocate */}
                     <div className="rounded-lg border border-green-200 bg-green-50/50 p-3">
                       <div className="flex items-center gap-1.5 mb-2">
@@ -790,7 +790,7 @@ export default function ReportView({ sessionId, decision, deliberationFullText, 
                 Session Metadata
               </h2>
               <div className="bg-white border border-gray-200 rounded-lg p-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <p className="text-xs text-gray-500 mb-1">Session ID</p>
                     <p className="text-sm font-mono text-gray-900 break-all">{sessionId}</p>

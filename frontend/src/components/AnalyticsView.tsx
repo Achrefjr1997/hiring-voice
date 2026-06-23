@@ -135,7 +135,7 @@ export default function AnalyticsView() {
   return (
     <div className="flex-1 overflow-y-auto">
       {/* ── Global Filter Bar ── */}
-      <div className="sticky top-0 z-10 bg-surface-default border-b border-border-default px-8 py-3 flex items-center justify-between">
+      <div className="sticky top-0 z-10 bg-surface-default border-b border-border-default px-4 lg:px-8 py-3 flex items-center justify-between flex-wrap gap-2">
         <DateRangePicker startDate={startDate} endDate={endDate} onChange={handleDateChange} />
         <div className="flex items-center gap-2">
           <button
@@ -168,9 +168,9 @@ export default function AnalyticsView() {
           <p className="text-caption text-text-muted">Loading analytics…</p>
         </div>
       ) : (
-        <div className="p-8 space-y-8">
+        <div className="p-4 lg:p-8 space-y-8">
           {/* ── KPI Cards ── */}
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <KpiCard label="Total Interviews" value={stats?.total_sessions ?? 0} />
             <KpiCard label="Active Sessions" value={stats?.active_sessions ?? 0} />
             <KpiCard label="Total Candidates" value={stats?.total_candidates ?? 0} />
@@ -182,7 +182,7 @@ export default function AnalyticsView() {
           </div>
 
           {/* ── Charts Row ── */}
-          <div className="grid grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Pie Chart — Status Breakdown */}
             <div className="bg-surface-default border border-border-default rounded-radius-card p-6">
               <h3 className="text-caption font-semibold text-text-secondary uppercase tracking-wider mb-4">Status Breakdown</h3>

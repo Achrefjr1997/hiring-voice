@@ -220,12 +220,12 @@ export default function VoiceInterface({ events, onAudioReady, sessionStatus, se
   const recordingTime = isRecording ? "Listening\u2026 Tap to stop" : aiSpeaking ? "Interviewer speaking\u2026" : "Tap to speak";
 
   return (
-    <div className="flex flex-col items-center w-full max-w-xl mx-auto gap-6">
+    <div className="flex flex-col items-center w-full max-w-xl mx-auto gap-4 sm:gap-6">
       {/* Transcript container */}
       <div
         ref={containerRef}
         onScroll={handleScroll}
-        className="flex flex-col gap-6 min-h-80 max-h-[60vh] overflow-y-auto w-full px-4 py-4 scroll-smooth"
+        className="flex flex-col gap-6 min-h-80 max-h-[50vh] sm:max-h-[60vh] overflow-y-auto w-full px-3 sm:px-4 py-4 scroll-smooth"
       >
         <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-accent-gold/10 border border-accent-gold/30 text-accent-gold font-medium mb-6 transition-all duration-300 max-w-full whitespace-nowrap overflow-hidden text-ellipsis self-start">
           <Target size={16} />

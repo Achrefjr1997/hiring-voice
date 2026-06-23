@@ -917,4 +917,3 @@ services:
 
 *VoiceHire — System Design & Architecture*
 *Band of Agents Hackathon 2026 · AI/ML API + Featherless AI + Deepgram + Band.ai*
-*Verified against source code — June 2026*
